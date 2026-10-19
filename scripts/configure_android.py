@@ -50,7 +50,6 @@ def configure_manifest():
     print("Configured AndroidManifest.xml successfully.")
 
 def configure_build_gradle():
-    # Support both Groovy (.gradle) and Kotlin (.gradle.kts)
     candidates = [
         os.path.join("android", "app", "build.gradle"),
         os.path.join("android", "app", "build.gradle.kts"),
@@ -79,19 +78,6 @@ def configure_build_gradle():
         content = re.sub(r'targetSdkVersion\s+[^\n]+', 'targetSdkVersion 34', content)
         content = re.sub(r'targetSdk\s*=\s*[^\n]+', 'targetSdk = 34', content)
         content = re.sub(r'targetSdk\s+flutter\.[^\n]+', 'targetSdk = 34', content)
-
-        # Ensure release build uses debug signing config so APK can be installed directly
-        if "signingConfig = signingConfigs.debug" not in content and "signingConfig = signingConfigs.getByName(\"debug\")" not in content:
-            if gradle_path.endswith(".kts"):
-                content = content.replace(
-                    "buildTypes {",
-                    "buildTypes {\n        getByName(\"release\") {\n            signingConfig = signingConfigs.getByName(\"debug\")\n        }"
-                )
-            else:
-                content = content.replace(
-                    "buildTypes {",
-                    "buildTypes {\n        release {\n            signingConfig = signingConfigs.debug\n        }"
-                )
 
         with open(gradle_path, "w", encoding="utf-8") as f:
             f.write(content)

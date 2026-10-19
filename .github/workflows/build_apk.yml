@@ -45,14 +45,30 @@ jobs:
           set -o pipefail
           flutter build apk --release -v 2>&1 | tee build.log
 
-      - name: Report Build Errors to Summary
+      - name: Prepare Failure Diagnostics
         if: failure()
         run: |
           echo "## ❌ Build Android APK Failed" >> $GITHUB_STEP_SUMMARY
-          echo "### Last 120 lines of build log:" >> $GITHUB_STEP_SUMMARY
+          echo "### Compilation Error Summary:" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          tail -n 120 build.log >> $GITHUB_STEP_SUMMARY || true
+          grep -i -C 3 -E "error:|exception:|failed" build.log | tail -n 80 >> $GITHUB_STEP_SUMMARY || true
+          tail -n 80 build.log >> $GITHUB_STEP_SUMMARY || true
           echo '```' >> $GITHUB_STEP_SUMMARY
+
+          echo "### ❌ Build Failure Diagnostics" > failure_diagnostics.txt
+          echo '```' >> failure_diagnostics.txt
+          tail -n 100 build.log >> failure_diagnostics.txt || true
+          echo '```' >> failure_diagnostics.txt
+
+      - name: Report Build Failure to Release
+        if: failure()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.0
+          name: "Build Failure Diagnostics"
+          body_path: failure_diagnostics.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Locate and Stage APK
         run: |
