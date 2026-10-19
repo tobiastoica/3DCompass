@@ -28,7 +28,7 @@ class CanvassingViewModel extends ChangeNotifier {
   String _buildingName = '';
   int _activeFloor = 0;
   final Map<String, NavNode> _surveyedNodes = {};
-  final List<NavEdge> _surveyedEdges = {};
+  final List<NavEdge> _surveyedEdges = [];
   final List<FloorLevel> _floors = [
     const FloorLevel(
       floorIndex: 0,
