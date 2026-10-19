@@ -49,15 +49,26 @@ jobs:
       - name: Prepare Failure Diagnostics
         if: failure()
         run: |
-          echo "## ❌ Build Failed" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          grep -B 25 -A 5 "throwToolExit" build.log >> $GITHUB_STEP_SUMMARY || grep -B 25 -A 5 "#0" build.log >> $GITHUB_STEP_SUMMARY || tail -n 80 build.log >> $GITHUB_STEP_SUMMARY || true
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          python3 -c "
+          with open('build.log', 'r', errors='ignore') as f:
+              lines = f.readlines()
 
-          echo "### ❌ Build Failure Diagnostics" > failure_diagnostics.txt
-          echo '```' >> failure_diagnostics.txt
-          grep -B 25 -A 5 "throwToolExit" build.log >> failure_diagnostics.txt || grep -B 25 -A 5 "#0" build.log >> failure_diagnostics.txt || tail -n 80 build.log >> failure_diagnostics.txt || true
-          echo '```' >> failure_diagnostics.txt
+          matches = []
+          for i, line in enumerate(lines):
+              l_lower = line.lower()
+              if 'failed to build' in l_lower or 'target ' in l_lower and 'failed' in l_lower or 'caused by:' in l_lower or 'error:' in l_lower:
+                  start = max(0, i - 12)
+                  end = min(len(lines), i + 15)
+                  matches.append(f'=== MATCH AT LINE {i} ===\n')
+                  matches.extend(lines[start:end])
+                  matches.append('\n----------------------------------------\n')
+
+          if not matches:
+              matches = lines[-120:]
+
+          with open('failure_diagnostics.txt', 'w') as out:
+              out.writelines(matches[-150:])
+          "
 
       - name: Report Build Failure to Release
         if: failure()
