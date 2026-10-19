@@ -46,23 +46,23 @@ jobs:
 
       - name: Locate and Stage APK
         run: |
-          echo "=== SEARCHING FOR COMPILED APK FILES ==="
+          echo "=== SEARCHING WORKSPACE FOR COMPILED APK FILES ==="
+          find . -type f -name "*.apk" -ls
           mkdir -p apk_output
-          find build -type f -name "*.apk" -exec cp -v {} apk_output/ \;
+          find . -type f -name "*.apk" ! -path "*/apk_output/*" -exec cp -v {} apk_output/ \;
           echo "=== STAGED APK FILES ==="
           ls -la apk_output/
           if [ -z "$(ls -A apk_output)" ]; then
-            echo "ERROR: No APK files found in build directory!"
+            echo "ERROR: No APK files found in workspace!"
             exit 1
           fi
 
-      - name: Print Failure Log
-        if: failure()
-        run: |
-          echo "=== FAILURE LOG SUMMARY ==="
-          grep -i -C 3 -E "error:|exception:|failed" build.log | tail -n 100 || true
-          echo "=== LAST 100 LINES OF BUILD LOG ==="
-          tail -n 100 build.log || true
+      - name: Upload Build Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
