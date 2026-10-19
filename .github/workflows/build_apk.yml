@@ -25,50 +25,8 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Configure Android Project
-        run: |
-          rm -rf android/
-          flutter create . --platforms=android --org com.compass3d.indoor
-
-          # Inject permissions and hardware requirements into AndroidManifest.xml
-          python3 -c "
-          manifest_path = 'android/app/src/main/AndroidManifest.xml'
-          with open(manifest_path, 'r') as f:
-              content = f.read()
-
-          permissions = '''
-              <uses-permission android:name=\"android.permission.HIGH_SAMPLING_RATE_SENSORS\" />
-              <uses-permission android:name=\"android.permission.ACTIVITY_RECOGNITION\" />
-              <uses-permission android:name=\"android.permission.BODY_SENSORS\" />
-              <uses-permission android:name=\"android.permission.ACCESS_FINE_LOCATION\" />
-              <uses-permission android:name=\"android.permission.ACCESS_COARSE_LOCATION\" />
-              <uses-permission android:name=\"android.permission.CAMERA\" />
-              <uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\" />
-              <uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\" android:maxSdkVersion=\"28\" />
-          '''
-
-          content = content.replace('<application', permissions + '\n    <application android:requestLegacyExternalStorage=\"true\"')
-          content = content.replace('</activity>', '</activity>\n        <meta-data android:name=\"com.google.ar.core\" android:value=\"optional\" />')
-
-          with open(manifest_path, 'w') as f:
-              f.write(content)
-
-          # Ensure compileSdk 34 and minSdk 24 in android/app/build.gradle
-          app_gradle_path = 'android/app/build.gradle'
-          with open(app_gradle_path, 'r') as f:
-              gradle_content = f.read()
-
-          # Replace compileSdkVersion
-          gradle_content = gradle_content.replace('compileSdkVersion flutter.compileSdkVersion', 'compileSdkVersion 34')
-          gradle_content = gradle_content.replace('compileSdk = flutter.compileSdkVersion', 'compileSdk = 34')
-          gradle_content = gradle_content.replace('minSdkVersion flutter.minSdkVersion', 'minSdkVersion 24')
-          gradle_content = gradle_content.replace('minSdk = flutter.minSdkVersion', 'minSdk = 24')
-
-          with open(app_gradle_path, 'w') as f:
-              f.write(gradle_content)
-
-          print('Successfully configured AndroidManifest.xml and build.gradle')
-          "
+      - name: Make gradlew executable
+        run: chmod +x android/gradlew
 
       - name: Get Dependencies
         run: flutter pub get
