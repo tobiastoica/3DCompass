@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Configures AndroidManifest.xml and app/build.gradle for 3DCompass."""
+"""Configures AndroidManifest.xml and app/build.gradle[.kts] for 3DCompass."""
 
 import os
 import re
@@ -50,32 +50,55 @@ def configure_manifest():
     print("Configured AndroidManifest.xml successfully.")
 
 def configure_build_gradle():
-    gradle_path = os.path.join("android", "app", "build.gradle")
-    if not os.path.exists(gradle_path):
-        print(f"build.gradle not found at {gradle_path}")
-        return
+    # Support both Groovy (.gradle) and Kotlin (.gradle.kts)
+    candidates = [
+        os.path.join("android", "app", "build.gradle"),
+        os.path.join("android", "app", "build.gradle.kts"),
+    ]
 
-    with open(gradle_path, "r", encoding="utf-8") as f:
-        content = f.read()
+    found = False
+    for gradle_path in candidates:
+        if not os.path.exists(gradle_path):
+            continue
 
-    # Replace compileSdk
-    content = re.sub(r'compileSdkVersion\s+[^\n]+', 'compileSdkVersion 34', content)
-    content = re.sub(r'compileSdk\s*=\s*[^\n]+', 'compileSdk = 34', content)
-    content = re.sub(r'compileSdk\s+flutter\.[^\n]+', 'compileSdk 34', content)
+        found = True
+        with open(gradle_path, "r", encoding="utf-8") as f:
+            content = f.read()
 
-    # Replace minSdk
-    content = re.sub(r'minSdkVersion\s+[^\n]+', 'minSdkVersion 24', content)
-    content = re.sub(r'minSdk\s*=\s*[^\n]+', 'minSdk = 24', content)
-    content = re.sub(r'minSdk\s+flutter\.[^\n]+', 'minSdk = 24', content)
+        # Replace compileSdk
+        content = re.sub(r'compileSdkVersion\s+[^\n]+', 'compileSdkVersion 34', content)
+        content = re.sub(r'compileSdk\s*=\s*[^\n]+', 'compileSdk = 34', content)
+        content = re.sub(r'compileSdk\s+flutter\.[^\n]+', 'compileSdk 34', content)
 
-    # Replace targetSdk
-    content = re.sub(r'targetSdkVersion\s+[^\n]+', 'targetSdkVersion 34', content)
-    content = re.sub(r'targetSdk\s*=\s*[^\n]+', 'targetSdk = 34', content)
-    content = re.sub(r'targetSdk\s+flutter\.[^\n]+', 'targetSdk = 34', content)
+        # Replace minSdk
+        content = re.sub(r'minSdkVersion\s+[^\n]+', 'minSdkVersion 24', content)
+        content = re.sub(r'minSdk\s*=\s*[^\n]+', 'minSdk = 24', content)
+        content = re.sub(r'minSdk\s+flutter\.[^\n]+', 'minSdk = 24', content)
 
-    with open(gradle_path, "w", encoding="utf-8") as f:
-        f.write(content)
-    print("Configured app/build.gradle successfully.")
+        # Replace targetSdk
+        content = re.sub(r'targetSdkVersion\s+[^\n]+', 'targetSdkVersion 34', content)
+        content = re.sub(r'targetSdk\s*=\s*[^\n]+', 'targetSdk = 34', content)
+        content = re.sub(r'targetSdk\s+flutter\.[^\n]+', 'targetSdk = 34', content)
+
+        # Ensure release build uses debug signing config so APK can be installed directly
+        if "signingConfig = signingConfigs.debug" not in content and "signingConfig = signingConfigs.getByName(\"debug\")" not in content:
+            if gradle_path.endswith(".kts"):
+                content = content.replace(
+                    "buildTypes {",
+                    "buildTypes {\n        getByName(\"release\") {\n            signingConfig = signingConfigs.getByName(\"debug\")\n        }"
+                )
+            else:
+                content = content.replace(
+                    "buildTypes {",
+                    "buildTypes {\n        release {\n            signingConfig = signingConfigs.debug\n        }"
+                )
+
+        with open(gradle_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        print(f"Configured {gradle_path} successfully.")
+
+    if not found:
+        print("ERROR: Neither build.gradle nor build.gradle.kts found!")
 
 if __name__ == "__main__":
     configure_manifest()
