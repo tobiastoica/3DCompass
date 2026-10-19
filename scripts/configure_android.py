@@ -64,10 +64,10 @@ def configure_build_gradle():
         with open(gradle_path, "r", encoding="utf-8") as f:
             content = f.read()
 
-        # Replace compileSdk
-        content = re.sub(r'compileSdkVersion\s+[^\n]+', 'compileSdkVersion 34', content)
-        content = re.sub(r'compileSdk\s*=\s*[^\n]+', 'compileSdk = 34', content)
-        content = re.sub(r'compileSdk\s+flutter\.[^\n]+', 'compileSdk 34', content)
+        # Replace compileSdk (minimum 36 required by geolocator_android and jni_flutter)
+        content = re.sub(r'compileSdkVersion\s+[^\n]+', 'compileSdkVersion 36', content)
+        content = re.sub(r'compileSdk\s*=\s*[^\n]+', 'compileSdk = 36', content)
+        content = re.sub(r'compileSdk\s+flutter\.[^\n]+', 'compileSdk 36', content)
 
         # Replace minSdk
         content = re.sub(r'minSdkVersion\s+[^\n]+', 'minSdkVersion 24', content)
