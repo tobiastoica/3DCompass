@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../../domain/models/floor_level.dart';
-import '../theme/app_colors.dart';
+import 'package:compass_3d/domain/models/floor_level.dart';
+import 'package:compass_3d/ui/core/theme/app_colors.dart';
 
 /// An interactive vertical or horizontal pill selector for multi-story buildings.
 class FloorLevelSelector extends StatelessWidget {

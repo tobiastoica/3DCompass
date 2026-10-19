@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../../domain/models/building_3d_model.dart';
-import '../../core/constants/app_breakpoints.dart';
-import '../../core/theme/app_colors.dart';
+import 'package:compass_3d/domain/models/building_3d_model.dart';
+import 'package:compass_3d/ui/core/constants/app_breakpoints.dart';
+import 'package:compass_3d/ui/core/theme/app_colors.dart';
 import '../view_models/map_selection_view_model.dart';
 
 /// Screen displaying preloaded and surveyed building maps with options to navigate or survey.

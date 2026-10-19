@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../core/theme/app_colors.dart';
+import 'package:compass_3d/ui/core/theme/app_colors.dart';
 
 /// Renders a camera viewfinder HUD overlay for ARCore surveying.
 class ArViewfinderWidget extends StatelessWidget {

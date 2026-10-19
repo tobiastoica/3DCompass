@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../../domain/models/nav_node.dart';
-import '../../core/theme/app_colors.dart';
+import 'package:compass_3d/domain/models/nav_node.dart';
+import 'package:compass_3d/ui/core/theme/app_colors.dart';
 import '../view_models/doorway_checkin_view_model.dart';
 
 /// Modal dialog prompting the user to confirm their exact doorway location.

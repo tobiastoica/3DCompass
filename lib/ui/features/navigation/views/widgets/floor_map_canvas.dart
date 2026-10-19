@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../../../domain/models/building_3d_model.dart';
-import '../../../../domain/models/coordinates_3d.dart';
-import '../../../../domain/models/navigation_path.dart';
-import '../../../core/theme/app_colors.dart';
+import 'package:compass_3d/domain/models/building_3d_model.dart';
+import 'package:compass_3d/domain/models/coordinates_3d.dart';
+import 'package:compass_3d/domain/models/navigation_path.dart';
+import 'package:compass_3d/ui/core/theme/app_colors.dart';
 
 /// Renders a dynamic vector canvas representing the active building floor plan.
 class FloorMapCanvas extends StatelessWidget {

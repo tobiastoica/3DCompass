@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../../../domain/models/nav_edge.dart';
-import '../../../../domain/models/nav_node.dart';
-import '../../../core/theme/app_colors.dart';
+import 'package:compass_3d/domain/models/nav_edge.dart';
+import 'package:compass_3d/domain/models/nav_node.dart';
+import 'package:compass_3d/ui/core/theme/app_colors.dart';
 
 /// Control panel containing actions to mark rooms, stairwells, and finish surveying.
 class CanvassActionSheet extends StatelessWidget {

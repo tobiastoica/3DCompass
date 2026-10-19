@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import '../../../../domain/models/nav_node.dart';
-import '../../../core/constants/app_breakpoints.dart';
-import '../../../core/widgets/floor_level_selector.dart';
-import '../../../core/widgets/sensor_status_badge.dart';
-import '../../doorway_checkin/views/doorway_checkin_dialog.dart';
+import 'package:compass_3d/domain/models/nav_node.dart';
+import 'package:compass_3d/ui/core/constants/app_breakpoints.dart';
+import 'package:compass_3d/ui/core/widgets/floor_level_selector.dart';
+import 'package:compass_3d/ui/core/widgets/sensor_status_badge.dart';
+import 'package:compass_3d/ui/features/doorway_checkin/views/doorway_checkin_dialog.dart';
 import '../view_models/navigation_view_model.dart';
 import 'widgets/floor_map_canvas.dart';
 import 'widgets/navigation_hud_overlay.dart';

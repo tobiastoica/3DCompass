@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../core/widgets/compass_3d_renderer.dart';
+import 'package:compass_3d/ui/core/theme/app_colors.dart';
+import 'package:compass_3d/ui/core/widgets/compass_3d_renderer.dart';
 
 /// Floating HUD container holding the 3D Vector Compass.
 class NavigationHudOverlay extends StatelessWidget {
