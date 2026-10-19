@@ -41,7 +41,9 @@ jobs:
         run: dart test/run_all_tests.dart
 
       - name: Flutter Analyze
-        run: flutter analyze
+        run: |
+          set -o pipefail
+          flutter analyze 2>&1 | tee analyze.log
 
       - name: Build Android APK
         run: |
@@ -51,14 +53,28 @@ jobs:
       - name: Prepare Failure Diagnostics
         if: failure()
         run: |
-          echo "## ❌ Build Android APK Failed" >> $GITHUB_STEP_SUMMARY
+          echo "## ❌ Build/Analyze Failed" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          grep -C 25 "What went wrong:" build.log >> $GITHUB_STEP_SUMMARY || tail -n 100 build.log >> $GITHUB_STEP_SUMMARY || true
+          if [ -f analyze.log ]; then
+            echo "=== FLUTTER ANALYZE OUTPUT ===" >> $GITHUB_STEP_SUMMARY
+            cat analyze.log >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ -f build.log ]; then
+            echo "=== BUILD LOG ===" >> $GITHUB_STEP_SUMMARY
+            grep -C 20 "What went wrong:" build.log >> $GITHUB_STEP_SUMMARY || tail -n 80 build.log >> $GITHUB_STEP_SUMMARY || true
+          fi
           echo '```' >> $GITHUB_STEP_SUMMARY
 
-          echo "### ❌ Build Failure Diagnostics" > failure_diagnostics.txt
+          echo "### ❌ Build/Analyze Failure Diagnostics" > failure_diagnostics.txt
           echo '```' >> failure_diagnostics.txt
-          grep -C 25 "What went wrong:" build.log >> failure_diagnostics.txt || tail -n 100 build.log >> failure_diagnostics.txt || true
+          if [ -f analyze.log ]; then
+            echo "=== FLUTTER ANALYZE OUTPUT ===" >> failure_diagnostics.txt
+            cat analyze.log >> failure_diagnostics.txt
+          fi
+          if [ -f build.log ]; then
+            echo "=== BUILD LOG ===" >> failure_diagnostics.txt
+            grep -C 20 "What went wrong:" build.log >> failure_diagnostics.txt || tail -n 80 build.log >> failure_diagnostics.txt || true
+          fi
           echo '```' >> failure_diagnostics.txt
 
       - name: Report Build Failure to Release
@@ -93,7 +109,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-log
-          path: build.log
+          path: |
+            analyze.log
+            build.log
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
