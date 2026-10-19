@@ -44,6 +44,18 @@ jobs:
         run: |
           flutter build apk --release -v 2>&1 | tee build.log
 
+      - name: Locate and Stage APK
+        run: |
+          echo "=== SEARCHING FOR COMPILED APK FILES ==="
+          mkdir -p apk_output
+          find build -type f -name "*.apk" -exec cp -v {} apk_output/ \;
+          echo "=== STAGED APK FILES ==="
+          ls -la apk_output/
+          if [ -z "$(ls -A apk_output)" ]; then
+            echo "ERROR: No APK files found in build directory!"
+            exit 1
+          fi
+
       - name: Print Failure Log
         if: failure()
         run: |
@@ -56,7 +68,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: 3d-compass-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: apk_output/*.apk
 
       - name: Publish Direct APK Download Release
         uses: softprops/action-gh-release@v2
@@ -69,6 +81,6 @@ jobs:
             - **Target OS**: Android (minSdk 24, compileSdk 34)
             - **Features**: Doorway calibration, Barometric altimetry, 7-state EKF sensor fusion, 3D Compass HUD, 3D A* Multi-Floor routing, offline binary `.3dnav` engine.
             - **Telemetry Log**: `/storage/emulated/0/Download/3d_compass_log_<timestamp>.txt`
-          files: build/app/outputs/flutter-apk/app-release.apk
+          files: apk_output/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
