@@ -41,8 +41,12 @@ class _MapSelectionScreenState extends State<MapSelectionScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.backgroundDark,
       appBar: AppBar(
-        title: const Text('3D Compass Buildings'),
+        title: const Text(
+          '3D Compass Navigation',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         actions: [
           if (widget.onViewLogs != null)
             IconButton(
@@ -52,41 +56,55 @@ class _MapSelectionScreenState extends State<MapSelectionScreen> {
             ),
           IconButton(
             icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh Buildings',
             onPressed: widget.viewModel.loadBuildings,
           ),
         ],
       ),
-      body: ListenableBuilder(
-        listenable: widget.viewModel,
-        builder: (context, _) {
-          if (widget.viewModel.isLoading) {
-            return const Center(child: CircularProgressIndicator(color: AppColors.cyanAccent));
-          }
+      body: SafeArea(
+        child: ListenableBuilder(
+          listenable: widget.viewModel,
+          builder: (context, _) {
+            if (widget.viewModel.isLoading) {
+              return const Center(child: CircularProgressIndicator(color: AppColors.cyanAccent));
+            }
 
-          final buildings = widget.viewModel.buildings;
+            final buildings = widget.viewModel.buildings;
 
-          return Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: AppBreakpoints.maxContentWidth),
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  _buildCanvassBanner(context),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'Saved 3D Building Maps',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-                  ),
-                  const SizedBox(height: 10),
-                  if (buildings.isEmpty)
-                    _buildEmptyState()
-                  else
-                    ...buildings.map((b) => _buildBuildingCard(b)),
-                ],
+            return Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: AppBreakpoints.maxContentWidth),
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  children: [
+                    _buildCanvassBanner(context),
+                    const SizedBox(height: 24),
+                    const Row(
+                      children: [
+                        Icon(Icons.map, color: AppColors.cyanAccent, size: 20),
+                        SizedBox(width: 8),
+                        Text(
+                          'Select Building to Navigate',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Tap any building below to open the 3D Compass & Floor Map:',
+                      style: TextStyle(color: Colors.white60, fontSize: 13),
+                    ),
+                    const SizedBox(height: 12),
+                    if (buildings.isEmpty)
+                      _buildEmptyState()
+                    else
+                      ...buildings.map((b) => _buildBuildingCard(b)),
+                  ],
+                ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
@@ -96,11 +114,19 @@ class _MapSelectionScreenState extends State<MapSelectionScreen> {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [AppColors.cobaltBlue, Color(0xFF1E1B4B)],
+          colors: [Color(0xFF1E3A8A), Color(0xFF0F172A)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.cyanAccent.withOpacity(0.4), width: 1.2),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black45,
+            blurRadius: 12,
+            offset: Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -110,25 +136,31 @@ class _MapSelectionScreenState extends State<MapSelectionScreen> {
               Icon(Icons.view_in_ar, color: AppColors.cyanAccent, size: 28),
               SizedBox(width: 10),
               Text(
-                'Register New Building',
+                'Map a New Building',
                 style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ],
           ),
           const SizedBox(height: 8),
           const Text(
-            'Walk around with your phone using ARCore plane tracking and hardware sensors to map corridors, rooms, and multi-story layouts.',
-            style: TextStyle(color: Colors.white70, fontSize: 13),
+            'Walk around your building with phone in hand. ARCore and hardware sensors automatically map hallways, stairwells, and multi-floor layouts.',
+            style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.35),
           ),
           const SizedBox(height: 16),
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.cyanAccent,
               foregroundColor: Colors.black,
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              elevation: 3,
             ),
             onPressed: widget.onStartSurvey,
-            icon: const Icon(Icons.add_a_photo),
-            label: const Text('Start Canvassing'),
+            icon: const Icon(Icons.add_a_photo, size: 20),
+            label: const Text(
+              'Start 3D Survey (Canvassing)',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            ),
           ),
         ],
       ),
@@ -149,7 +181,7 @@ class _MapSelectionScreenState extends State<MapSelectionScreen> {
           ),
           SizedBox(height: 4),
           Text(
-            'Tap "Start Canvassing" above to survey your first building.',
+            'Tap "Start 3D Survey" above to survey your first building.',
             style: TextStyle(color: Colors.white38, fontSize: 13),
           ),
         ],
@@ -161,26 +193,78 @@ class _MapSelectionScreenState extends State<MapSelectionScreen> {
     return Card(
       color: AppColors.surfaceDark,
       margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: ListTile(
-        contentPadding: const EdgeInsets.all(16),
-        leading: const CircleAvatar(
-          backgroundColor: Colors.white10,
-          child: Icon(Icons.apartment, color: AppColors.cyanAccent),
-        ),
-        title: Text(
-          building.name,
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        subtitle: Text(
-          '${building.floors.length} Floors • ${building.navGraph.nodes.length} Waypoints',
-          style: const TextStyle(color: Colors.white54, fontSize: 13),
-        ),
-        trailing: const Icon(Icons.arrow_forward_ios, color: AppColors.cyanAccent, size: 16),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: const BorderSide(color: Colors.white12),
+      ),
+      elevation: 2,
+      child: InkWell(
         onTap: () {
           widget.viewModel.selectBuilding(building);
           widget.onSelectBuilding(building);
         },
+        borderRadius: BorderRadius.circular(18),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: AppColors.cobaltBlue.withOpacity(0.25),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.cyanAccent.withOpacity(0.5)),
+                ),
+                child: const Icon(Icons.apartment, color: AppColors.cyanAccent, size: 26),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      building.name,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${building.floors.length} Floors • ${building.navGraph.nodes.length} Waypoints',
+                      style: const TextStyle(color: Colors.white60, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.cyanAccent.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.cyanAccent.withOpacity(0.4)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Open',
+                      style: TextStyle(
+                        color: AppColors.cyanAccent,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                    SizedBox(width: 4),
+                    Icon(Icons.arrow_forward_ios, color: AppColors.cyanAccent, size: 12),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

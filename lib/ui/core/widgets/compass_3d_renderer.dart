@@ -28,6 +28,8 @@ class Compass3DRenderer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hasTarget = targetLabel != null && targetLabel!.isNotEmpty;
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final diameter = math.min(constraints.maxWidth, constraints.maxHeight);
@@ -42,30 +44,61 @@ class Compass3DRenderer extends StatelessWidget {
                 painter: _Arrow3DPainter(
                   azimuthRad: targetAzimuthDegrees * math.pi / 180.0,
                   pitchRad: targetPitchDegrees * math.pi / 180.0,
+                  isActive: hasTarget,
                 ),
               ),
               Positioned(
-                bottom: 12,
+                bottom: 8,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      '${distanceMeters.toStringAsFixed(1)} m',
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.cyanAccent,
-                        letterSpacing: 0.5,
+                    if (hasTarget) ...[
+                      Text(
+                        '${distanceMeters.toStringAsFixed(1)} m',
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.cyanAccent,
+                          letterSpacing: 0.5,
+                        ),
                       ),
-                    ),
-                    if (targetLabel != null)
+                      if (targetPitchDegrees.abs() > 15.0)
+                        Text(
+                          targetPitchDegrees > 0 ? '▲ Floor Up' : '▼ Floor Down',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: targetPitchDegrees > 0 ? AppColors.emeraldGreen : AppColors.amberWarning,
+                          ),
+                        ),
                       Text(
                         targetLabel!,
                         style: const TextStyle(
-                          fontSize: 13,
+                          fontSize: 12,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ] else ...[
+                      const Text(
+                        '3D Compass',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
                           color: Colors.white70,
                         ),
                       ),
+                      const Text(
+                        'Ready',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.cyanAccent,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -81,22 +114,35 @@ class _Arrow3DPainter extends CustomPainter {
   _Arrow3DPainter({
     required this.azimuthRad,
     required this.pitchRad,
+    required this.isActive,
   });
 
   final double azimuthRad;
   final double pitchRad;
+  final bool isActive;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2 - 14);
-    final radius = math.min(size.width, size.height) * 0.36;
+    final center = Offset(size.width / 2, size.height / 2 - 12);
+    final radius = math.min(size.width, size.height) * 0.35;
 
     // Outer compass ring
     final ringPaint = Paint()
-      ..color = Colors.white12
+      ..color = isActive ? AppColors.cyanAccent.withOpacity(0.3) : Colors.white12
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
-    canvas.drawCircle(center, radius + 12, ringPaint);
+    canvas.drawCircle(center, radius + 10, ringPaint);
+
+    // Cardinal tick marks
+    final tickPaint = Paint()
+      ..color = Colors.white24
+      ..strokeWidth = 1.5;
+    for (var i = 0; i < 4; i++) {
+      final angle = i * math.pi / 2;
+      final p1 = center + Offset(math.cos(angle) * (radius + 6), math.sin(angle) * (radius + 6));
+      final p2 = center + Offset(math.cos(angle) * (radius + 14), math.sin(angle) * (radius + 14));
+      canvas.drawLine(p1, p2, tickPaint);
+    }
 
     // Dynamic 3D transform matrix
     final rot = v64.Matrix4.identity()
@@ -116,11 +162,11 @@ class _Arrow3DPainter extends CustomPainter {
 
     // Shaded facets
     final leftFacePaint = Paint()
-      ..color = AppColors.cyanAccent.withOpacity(0.95)
+      ..color = isActive ? AppColors.cyanAccent : Colors.white60
       ..style = PaintingStyle.fill;
 
     final rightFacePaint = Paint()
-      ..color = AppColors.cobaltBlue.withOpacity(0.95)
+      ..color = isActive ? AppColors.cobaltBlue : Colors.white30
       ..style = PaintingStyle.fill;
 
     // Draw Left Facet
@@ -142,7 +188,7 @@ class _Arrow3DPainter extends CustomPainter {
     // Outlines
     final strokePaint = Paint()
       ..color = Colors.white
-      ..strokeWidth = 2.2
+      ..strokeWidth = 2.0
       ..style = PaintingStyle.stroke;
     canvas.drawPath(leftPath, strokePaint);
     canvas.drawPath(rightPath, strokePaint);
@@ -150,6 +196,8 @@ class _Arrow3DPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _Arrow3DPainter oldDelegate) {
-    return oldDelegate.azimuthRad != azimuthRad || oldDelegate.pitchRad != pitchRad;
+    return oldDelegate.azimuthRad != azimuthRad ||
+        oldDelegate.pitchRad != pitchRad ||
+        oldDelegate.isActive != isActive;
   }
 }
