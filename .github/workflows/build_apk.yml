@@ -25,8 +25,11 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Make gradlew executable
-        run: chmod +x android/gradlew
+      - name: Regenerate Android Platform Files
+        run: |
+          rm -rf android/
+          flutter create --platforms=android --org com.compass3d.indoor .
+          python3 scripts/configure_android.py
 
       - name: Get Dependencies
         run: flutter pub get
@@ -35,7 +38,16 @@ jobs:
         run: dart test/run_all_tests.dart
 
       - name: Build Android APK
-        run: flutter build apk --release -v
+        run: |
+          flutter build apk --release -v 2>&1 | tee build.log
+
+      - name: Print Failure Log
+        if: failure()
+        run: |
+          echo "=== FAILURE LOG SUMMARY ==="
+          grep -i -C 3 -E "error:|exception:|failed" build.log | tail -n 100 || true
+          echo "=== LAST 100 LINES OF BUILD LOG ==="
+          tail -n 100 build.log || true
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
