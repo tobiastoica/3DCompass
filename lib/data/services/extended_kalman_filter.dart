@@ -71,8 +71,9 @@ class ExtendedKalmanFilter {
     required double stepLengthMeters,
     required double measuredHeadingRadians,
   }) {
-    // Fuse measured heading with low-pass update
-    final kHeading = _p[6] / (_p[6] + _qHeading);
+    // Process noise allows heading to track turns
+    _p[6] += 0.25;
+    final kHeading = _p[6] / (_p[6] + 0.08);
     _x[6] = _x[6] + kHeading * (measuredHeadingRadians - _x[6]);
     _p[6] = (1.0 - kHeading) * _p[6];
 
@@ -91,7 +92,7 @@ class ExtendedKalmanFilter {
 
   /// Updates vertical state with [measuredAltitudeMeters] from the barometer.
   void updateBarometerAltitude(double measuredAltitudeMeters) {
-    // Kalman gain for vertical elevation
+    _p[2] += 0.3; // Altitude process variance
     final kZ = _p[2] / (_p[2] + _rBaro);
     final residual = measuredAltitudeMeters - _x[2];
 

@@ -1,4 +1,3 @@
-import 'package:collection/collection.dart';
 import '../models/coordinates_3d.dart';
 import '../models/nav_edge.dart';
 import '../models/nav_graph_3d.dart';
@@ -35,7 +34,7 @@ class ComputeShortest3DPathUseCase {
       return NavigationPath(waypoints: [startNode]);
     }
 
-    final openSet = PriorityQueue<_NodeScore>(
+    final openSet = _PriorityQueue<_NodeScore>(
       (a, b) => a.fScore.compareTo(b.fScore),
     );
     final closedSet = <String>{};
@@ -104,3 +103,72 @@ class _NodeScore {
   final NavNode node;
   final double fScore;
 }
+
+/// A lightweight binary min-heap priority queue.
+class _PriorityQueue<T> {
+  _PriorityQueue(this._comparator);
+
+  final int Function(T a, T b) _comparator;
+  final List<T> _elements = [];
+
+  bool get isNotEmpty => _elements.isNotEmpty;
+  bool get isEmpty => _elements.isEmpty;
+
+  void add(T element) {
+    _elements.add(element);
+    _bubbleUp(_elements.length - 1);
+  }
+
+  T removeFirst() {
+    if (_elements.isEmpty) throw StateError('Priority queue is empty.');
+    final first = _elements.first;
+    final last = _elements.removeLast();
+    if (_elements.isNotEmpty) {
+      _elements[0] = last;
+      _sinkDown(0);
+    }
+    return first;
+  }
+
+  void _bubbleUp(int index) {
+    var i = index;
+    while (i > 0) {
+      final parent = (i - 1) >> 1;
+      if (_comparator(_elements[i], _elements[parent]) < 0) {
+        final temp = _elements[i];
+        _elements[i] = _elements[parent];
+        _elements[parent] = temp;
+        i = parent;
+      } else {
+        break;
+      }
+    }
+  }
+
+  void _sinkDown(int index) {
+    var i = index;
+    final length = _elements.length;
+    while (true) {
+      final left = (i << 1) + 1;
+      final right = left + 1;
+      var smallest = i;
+
+      if (left < length && _comparator(_elements[left], _elements[smallest]) < 0) {
+        smallest = left;
+      }
+      if (right < length && _comparator(_elements[right], _elements[smallest]) < 0) {
+        smallest = right;
+      }
+
+      if (smallest != i) {
+        final temp = _elements[i];
+        _elements[i] = _elements[smallest];
+        _elements[smallest] = temp;
+        i = smallest;
+      } else {
+        break;
+      }
+    }
+  }
+}
+

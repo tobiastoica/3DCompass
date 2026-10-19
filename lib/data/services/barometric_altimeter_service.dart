@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'package:sensors_plus/sensors_plus.dart';
 
 /// Measures relative vertical elevation using the onboard hardware barometer.
 ///
@@ -8,10 +7,10 @@ import 'package:sensors_plus/sensors_plus.dart';
 class BarometricAltimeterService {
   /// Creates an offline altimeter service.
   BarometricAltimeterService({
-    Stream<BarometerEvent>? barometerStream,
-  }) : _barometerStream = barometerStream ?? barometerEventStream();
+    Stream<double>? pressureStream,
+  }) : _pressureStream = pressureStream;
 
-  final Stream<BarometerEvent> _barometerStream;
+  final Stream<double>? _pressureStream;
   double? _entrancePressureHpa;
   double _lastFilteredAltitude = 0.0;
   static const double _lowPassAlpha = 0.2; // Exponential moving average smoothing
@@ -45,8 +44,9 @@ class BarometricAltimeterService {
 
   /// Emits smoothed relative vertical elevation in meters above the doorway entrance.
   Stream<double> get relativeElevationStream {
-    return _barometerStream.map((event) {
-      final rawAltitude = calculateRelativeAltitude(event.pressure);
+    final stream = _pressureStream ?? const Stream<double>.empty();
+    return stream.map((pressure) {
+      final rawAltitude = calculateRelativeAltitude(pressure);
       // Apply low-pass filter to reject indoor door-slamming pressure spikes
       _lastFilteredAltitude = (_lowPassAlpha * rawAltitude) + ((1.0 - _lowPassAlpha) * _lastFilteredAltitude);
       return _lastFilteredAltitude;

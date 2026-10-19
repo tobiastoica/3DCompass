@@ -18,7 +18,10 @@ class SensorFusionRepositoryImpl implements SensorFusionRepository {
     InertiaPdrService? pdrService,
     FaintGpsService? gpsService,
     ExtendedKalmanFilter? ekf,
-  })  : _altimeter = altimeterService ?? BarometricAltimeterService(),
+  })  : _altimeter = altimeterService ??
+            BarometricAltimeterService(
+              pressureStream: barometerEventStream().map((e) => e.pressure),
+            ),
         _pdr = pdrService ?? InertiaPdrService(),
         _gps = gpsService ?? FaintGpsService(),
         _ekf = ekf ?? ExtendedKalmanFilter();
