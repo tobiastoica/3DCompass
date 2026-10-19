@@ -5,6 +5,9 @@ on:
     branches: [ master, main ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -54,3 +57,18 @@ jobs:
         with:
           name: 3d-compass-release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Publish Direct APK Download Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.0
+          name: "3D Compass Android Release v1.0.0"
+          body: |
+            ### 🧭 3D Compass & Multi-Floor Navigation - APK Release
+            - **Commit**: `${{ github.sha }}`
+            - **Target OS**: Android (minSdk 24, compileSdk 34)
+            - **Features**: Doorway calibration, Barometric altimetry, 7-state EKF sensor fusion, 3D Compass HUD, 3D A* Multi-Floor routing, offline binary `.3dnav` engine.
+            - **Telemetry Log**: `/storage/emulated/0/Download/3d_compass_log_<timestamp>.txt`
+          files: build/app/outputs/flutter-apk/app-release.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
