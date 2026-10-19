@@ -51,18 +51,12 @@ jobs:
         run: |
           echo "## ❌ Build Failed" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          if [ -f build.log ]; then
-            echo "=== BUILD LOG ===" >> $GITHUB_STEP_SUMMARY
-            grep -C 20 "What went wrong:" build.log >> $GITHUB_STEP_SUMMARY || tail -n 80 build.log >> $GITHUB_STEP_SUMMARY || true
-          fi
+          grep -B 25 -A 5 "throwToolExit" build.log >> $GITHUB_STEP_SUMMARY || grep -B 25 -A 5 "#0" build.log >> $GITHUB_STEP_SUMMARY || tail -n 80 build.log >> $GITHUB_STEP_SUMMARY || true
           echo '```' >> $GITHUB_STEP_SUMMARY
 
           echo "### ❌ Build Failure Diagnostics" > failure_diagnostics.txt
           echo '```' >> failure_diagnostics.txt
-          if [ -f build.log ]; then
-            echo "=== BUILD LOG ===" >> failure_diagnostics.txt
-            grep -C 20 "What went wrong:" build.log >> failure_diagnostics.txt || tail -n 80 build.log >> failure_diagnostics.txt || true
-          fi
+          grep -B 25 -A 5 "throwToolExit" build.log >> failure_diagnostics.txt || grep -B 25 -A 5 "#0" build.log >> failure_diagnostics.txt || tail -n 80 build.log >> failure_diagnostics.txt || true
           echo '```' >> failure_diagnostics.txt
 
       - name: Report Build Failure to Release
