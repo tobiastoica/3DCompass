@@ -12,6 +12,7 @@ class MapSelectionScreen extends StatefulWidget {
     required this.viewModel,
     required this.onSelectBuilding,
     required this.onStartSurvey,
+    this.onViewLogs,
   });
 
   /// The view model providing the building list.
@@ -22,6 +23,9 @@ class MapSelectionScreen extends StatefulWidget {
 
   /// Callback when user taps to start canvassing a new building.
   final VoidCallback onStartSurvey;
+
+  /// Optional callback to view the device telemetry log path.
+  final VoidCallback? onViewLogs;
 
   @override
   State<MapSelectionScreen> createState() => _MapSelectionScreenState();
@@ -40,6 +44,12 @@ class _MapSelectionScreenState extends State<MapSelectionScreen> {
       appBar: AppBar(
         title: const Text('3D Compass Buildings'),
         actions: [
+          if (widget.onViewLogs != null)
+            IconButton(
+              icon: const Icon(Icons.description_outlined, color: AppColors.cyanAccent),
+              tooltip: 'Device Telemetry Logs',
+              onPressed: widget.onViewLogs,
+            ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: widget.viewModel.loadBuildings,

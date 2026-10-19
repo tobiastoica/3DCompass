@@ -8,6 +8,7 @@ import '../../domain/repositories/sensor_fusion_repository.dart';
 import '../services/barometric_altimeter_service.dart';
 import '../services/extended_kalman_filter.dart';
 import '../services/faint_gps_service.dart';
+import '../services/file_logger_service.dart';
 import '../services/inertia_pdr_service.dart';
 
 /// Implements [SensorFusionRepository] by orchestrating PDR, barometer, and EKF fusion.
@@ -18,18 +19,21 @@ class SensorFusionRepositoryImpl implements SensorFusionRepository {
     InertiaPdrService? pdrService,
     FaintGpsService? gpsService,
     ExtendedKalmanFilter? ekf,
+    FileLoggerService? logger,
   })  : _altimeter = altimeterService ??
             BarometricAltimeterService(
               pressureStream: barometerEventStream().map((e) => e.pressure),
             ),
         _pdr = pdrService ?? InertiaPdrService(),
         _gps = gpsService ?? FaintGpsService(),
-        _ekf = ekf ?? ExtendedKalmanFilter();
+        _ekf = ekf ?? ExtendedKalmanFilter(),
+        _logger = logger;
 
   final BarometricAltimeterService _altimeter;
   final InertiaPdrService _pdr;
   final FaintGpsService _gps;
   final ExtendedKalmanFilter _ekf;
+  final FileLoggerService? _logger;
 
   final _positionController = StreamController<PositionEstimate>.broadcast();
   final _orientationController = StreamController<Orientation3D>.broadcast();
@@ -59,6 +63,11 @@ class SensorFusionRepositoryImpl implements SensorFusionRepository {
       0.0,
     );
     _currentFloorIndex = 0;
+    _logger?.logDoorwayCheckin(
+      entranceId: anchor.entranceId,
+      entranceName: anchor.entranceName,
+      baselinePressureHpa: anchor.baselinePressureHpa,
+    );
     _emitCurrentEstimate();
   }
 
@@ -98,6 +107,14 @@ class SensorFusionRepositoryImpl implements SensorFusionRepository {
         rollRadians: 0.0,
       ));
 
+      _logger?.logPdrStep(
+        stepLengthMeters: step.stepLengthMeters,
+        headingDegrees: step.headingRadians * 180.0 / 3.141592653589793,
+        posX: _ekf.position.x,
+        posY: _ekf.position.y,
+        posZ: _ekf.position.z,
+      );
+
       _emitCurrentEstimate();
     });
 
@@ -105,12 +122,27 @@ class SensorFusionRepositoryImpl implements SensorFusionRepository {
     _altitudeSub = _altimeter.relativeElevationStream.listen((relativeZ) {
       _ekf.updateBarometerAltitude(relativeZ);
       _currentFloorIndex = _altimeter.estimateFloorIndex(relativeZ);
+
+      _logger?.logBarometerUpdate(
+        currentPressureHpa: _altimeter.entrancePressureHpa ?? 0.0,
+        relativeAltitudeMeters: relativeZ,
+        floorIndex: _currentFloorIndex,
+      );
+
       _emitCurrentEstimate();
     });
 
     // 3. Listen to Faint GNSS Fixes
     _gpsSub = _gps.fixStream.listen((fix) {
-      if (fix.isUsableIndoorFix) {
+      final isAccepted = fix.isUsableIndoorFix;
+      _logger?.logGpsFix(
+        latitude: fix.latitude,
+        longitude: fix.longitude,
+        accuracyMeters: fix.accuracyMeters,
+        isAccepted: isAccepted,
+      );
+
+      if (isAccepted) {
         // Soft bounding update
         _ekf.updateGpsFix(
           localX: _ekf.position.x, // correlated against active building origin

@@ -75,6 +75,64 @@ class _RootNavigator extends StatelessWidget {
           ),
         );
       },
+      onViewLogs: () {
+        final logPath = sl.logger.activeLogFilePath ?? '/storage/emulated/0/Download/3d_compass_log.txt';
+        showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: AppColors.surfaceDark,
+            title: const Row(
+              children: [
+                Icon(Icons.description, color: AppColors.cyanAccent),
+                SizedBox(width: 10),
+                Text('Device Telemetry Logs', style: TextStyle(color: Colors.white, fontSize: 17)),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Continuous telemetry is saved directly in the mobile Downloads directory for real-time inspection:',
+                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.black45,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.white12),
+                  ),
+                  child: SelectableText(
+                    logPath,
+                    style: const TextStyle(
+                      color: AppColors.cyanAccent,
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  '• Doorway baseline calibrations\n'
+                  '• PDR step lengths & heading angles\n'
+                  '• Barometer pressure & floor tracking\n'
+                  '• Faint GNSS fixes & EKF covariance\n'
+                  '• 3D A* computed paths & waypoints',
+                  style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.4),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Close', style: TextStyle(color: AppColors.cyanAccent)),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

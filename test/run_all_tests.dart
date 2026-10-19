@@ -1,9 +1,12 @@
+import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
 import '../lib/data/datasources/binary_nav_serializer.dart';
 import '../lib/data/services/barometric_altimeter_service.dart';
 import '../lib/data/services/extended_kalman_filter.dart';
+import '../lib/data/services/file_logger_service.dart';
 import '../lib/domain/models/coordinates_3d.dart';
 import '../lib/domain/models/floor_level.dart';
 import '../lib/domain/models/nav_edge.dart';
@@ -11,7 +14,7 @@ import '../lib/domain/models/nav_graph_3d.dart';
 import '../lib/domain/models/nav_node.dart';
 import '../lib/domain/use_cases/compute_shortest_3d_path_use_case.dart';
 
-void main() {
+Future<void> main() async {
   print('================================================================');
   print('    RUNNING 3D COMPASS INDOOR NAVIGATION TEST SUITE (PURE DART)  ');
   print('================================================================\n');
@@ -19,10 +22,10 @@ void main() {
   var passedCount = 0;
   var failedCount = 0;
 
-  void runTest(String name, void Function() testBody) {
+  Future<void> runTest(String name, FutureOr<void> Function() testBody) async {
     try {
       final stopwatch = Stopwatch()..start();
-      testBody();
+      await testBody();
       stopwatch.stop();
       print(' [PASS] $name (${stopwatch.elapsedMicroseconds} us)');
       passedCount++;
@@ -312,6 +315,79 @@ void main() {
     final pitchRad = math.atan2(dz, horizontalDist);
     final pitchDeg = pitchRad * 180.0 / math.pi;
     expectCloseTo(pitchDeg, 27.0, 0.5, '27 degrees upwards pitch tilt');
+  });
+
+  // =========================================================================
+  // 6. PERSISTENT FILE LOGGER TESTS (DOWNLOADS DIRECTORY LOGGING)
+  // =========================================================================
+  print('\n--- 6. Testing File Logger Service (Downloads Telemetry Logging) ---');
+
+  await runTest('Initializes log file on disk and writes structured telemetry entries', () async {
+    final tempDir = Directory.systemTemp.createTempSync('compass_test_logs');
+    final logger = FileLoggerService(customLogDirectory: tempDir.path);
+
+    // Initial log before initialize
+    logger.log(LogLevel.info, 'BOOT', 'Testing pre-initialization buffering');
+
+    // Initialize logger
+    final logPath = await logger.initialize();
+    expect(logger.isInitialized == true, 'Logger must be initialized');
+
+    // Write all telemetry event types
+    logger.logDoorwayCheckin(
+      entranceId: 'door_north_1',
+      entranceName: 'North Gate Doorway',
+      baselinePressureHpa: 1012.45,
+    );
+
+    logger.logPdrStep(
+      stepLengthMeters: 0.76,
+      headingDegrees: 48.5,
+      posX: 12.4,
+      posY: 8.2,
+      posZ: 3.6,
+    );
+
+    logger.logBarometerUpdate(
+      currentPressureHpa: 1012.01,
+      relativeAltitudeMeters: 3.65,
+      floorIndex: 1,
+    );
+
+    logger.logGpsFix(
+      latitude: 47.1234,
+      longitude: 8.5678,
+      accuracyMeters: 14.2,
+      isAccepted: true,
+    );
+
+    logger.logRouteComputed(
+      startNodeId: 'entrance',
+      targetNodeId: 'lab_301',
+      totalDistanceMeters: 45.2,
+      waypointCount: 6,
+      elapsedMicroseconds: 2150,
+    );
+
+    await logger.dispose();
+
+    // Verify file content on disk
+    final logFile = File(logger.activeLogFilePath!);
+    expect(logFile.existsSync() == true, 'Log file must exist on disk');
+
+    final content = logFile.readAsStringSync();
+    expect(content.contains('[DOORWAY]'), 'Must contain [DOORWAY] entry');
+    expect(content.contains('[PDR]'), 'Must contain [PDR] entry');
+    expect(content.contains('[BARO]'), 'Must contain [BARO] entry');
+    expect(content.contains('[GNSS]'), 'Must contain [GNSS] entry');
+    expect(content.contains('[ROUTE]'), 'Must contain [ROUTE] entry');
+    expect(content.contains('North Gate Doorway'), 'Must contain entrance name');
+    expect(content.contains('1012.45hPa'), 'Must contain baseline pressure');
+
+    // Cleanup temp directory
+    try {
+      tempDir.deleteSync(recursive: true);
+    } catch (_) {}
   });
 
   print('\n================================================================');

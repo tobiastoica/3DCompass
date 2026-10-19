@@ -18,12 +18,15 @@
 
     <!-- Camera & Google ARCore for real-time canvassing -->
     <uses-permission android:name="android.permission.CAMERA" />
-    <uses-feature android:name="android.hardware.camera.ar" android:required="false" />
+    <!-- Storage permissions for writing diagnostic logs to Downloads folder -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
 
     <application
         android:label="3D Compass"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:requestLegacyExternalStorage="true">
 
         <!-- Google ARCore optional/required declaration -->
         <meta-data

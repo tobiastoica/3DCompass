@@ -7,6 +7,7 @@ import 'data/services/arcore_canvass_service.dart';
 import 'data/services/barometric_altimeter_service.dart';
 import 'data/services/extended_kalman_filter.dart';
 import 'data/services/faint_gps_service.dart';
+import 'data/services/file_logger_service.dart';
 import 'data/services/inertia_pdr_service.dart';
 import 'domain/models/building_3d_model.dart';
 import 'domain/models/coordinates_3d.dart';
@@ -42,6 +43,8 @@ class ServiceLocator {
   late final ExtendedKalmanFilter ekf;
   late final ArCoreCanvassService arCoreService;
 
+  late final FileLoggerService logger;
+
   // Repositories
   late final BuildingRepository buildingRepository;
   late final SensorFusionRepository sensorFusionRepository;
@@ -55,6 +58,9 @@ class ServiceLocator {
 
   /// Initializes all dependencies and seeds sample building maps if empty.
   Future<void> initialize() async {
+    logger = FileLoggerService();
+    await logger.initialize();
+
     serializer = BinaryNavSerializer();
     localStorage = BuildingLocalStorage(serializer: serializer);
     altimeterService = BarometricAltimeterService();
@@ -69,6 +75,7 @@ class ServiceLocator {
       pdrService: pdrService,
       gpsService: gpsService,
       ekf: ekf,
+      logger: logger,
     );
     navigationRepository = NavigationRepositoryImpl();
 
