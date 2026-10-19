@@ -331,6 +331,7 @@ Future<void> main() async {
 
     // Initialize logger
     final logPath = await logger.initialize();
+    expect(logPath.isNotEmpty, 'Log path must be valid');
     expect(logger.isInitialized == true, 'Logger must be initialized');
 
     // Write all telemetry event types

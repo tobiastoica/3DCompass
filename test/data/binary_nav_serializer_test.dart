@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:compass_3d/data/datasources/binary_nav_serializer.dart';
 import 'package:compass_3d/domain/models/coordinates_3d.dart';
 import 'package:compass_3d/domain/models/floor_level.dart';
