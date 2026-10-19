@@ -1,15 +1,15 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
-import '../../../domain/models/building_3d_model.dart';
-import '../../../domain/models/coordinates_3d.dart';
-import '../../../domain/models/nav_node.dart';
-import '../../../domain/models/navigation_path.dart';
-import '../../../domain/models/position_estimate.dart';
-import '../../../domain/repositories/navigation_repository.dart';
-import '../../../domain/repositories/sensor_fusion_repository.dart';
-import '../../../domain/use_cases/compute_shortest_3d_path_use_case.dart';
-import '../../../domain/use_cases/track_live_position_use_case.dart';
+import 'package:compass_3d/domain/models/building_3d_model.dart';
+import 'package:compass_3d/domain/models/coordinates_3d.dart';
+import 'package:compass_3d/domain/models/nav_node.dart';
+import 'package:compass_3d/domain/models/navigation_path.dart';
+import 'package:compass_3d/domain/models/position_estimate.dart';
+import 'package:compass_3d/domain/repositories/navigation_repository.dart';
+import 'package:compass_3d/domain/repositories/sensor_fusion_repository.dart';
+import 'package:compass_3d/domain/use_cases/compute_shortest_3d_path_use_case.dart';
+import 'package:compass_3d/domain/use_cases/track_live_position_use_case.dart';
 
 /// Manages active multi-floor 3D navigation state and compass calculation.
 class NavigationViewModel extends ChangeNotifier {

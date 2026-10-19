@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:vector_math/vector_math_64.dart' as v64;
-import '../theme/app_colors.dart';
+import 'package:compass_3d/ui/core/theme/app_colors.dart';
 
 /// Renders a pitch-and-bearing-compensated 3D vector compass pointer.
 class Compass3DRenderer extends StatelessWidget {

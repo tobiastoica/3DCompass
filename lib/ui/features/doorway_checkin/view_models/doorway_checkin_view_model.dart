@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
-import '../../../domain/models/calibration_anchor.dart';
-import '../../../domain/models/coordinates_3d.dart';
-import '../../../domain/use_cases/calibrate_entrance_use_case.dart';
+import 'package:compass_3d/domain/models/calibration_anchor.dart';
+import 'package:compass_3d/domain/models/coordinates_3d.dart';
+import 'package:compass_3d/domain/use_cases/calibrate_entrance_use_case.dart';
 
 /// Manages doorway check-in and offline barometric datum calibration state.
 class DoorwayCheckinViewModel extends ChangeNotifier {

@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
-import '../../../domain/models/building_3d_model.dart';
-import '../../../domain/repositories/building_repository.dart';
-import '../../../domain/repositories/navigation_repository.dart';
+import 'package:compass_3d/domain/models/building_3d_model.dart';
+import 'package:compass_3d/domain/repositories/building_repository.dart';
+import 'package:compass_3d/domain/repositories/navigation_repository.dart';
 
 /// Manages building map listing and selection.
 class MapSelectionViewModel extends ChangeNotifier {

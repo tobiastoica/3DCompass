@@ -1,13 +1,13 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import '../../../data/services/arcore_canvass_service.dart';
-import '../../../domain/models/coordinates_3d.dart';
-import '../../../domain/models/floor_level.dart';
-import '../../../domain/models/nav_edge.dart';
-import '../../../domain/models/nav_node.dart';
-import '../../../domain/models/position_estimate.dart';
-import '../../../domain/use_cases/canvass_building_use_case.dart';
-import '../../../domain/use_cases/track_live_position_use_case.dart';
+import 'package:compass_3d/data/services/arcore_canvass_service.dart';
+import 'package:compass_3d/domain/models/coordinates_3d.dart';
+import 'package:compass_3d/domain/models/floor_level.dart';
+import 'package:compass_3d/domain/models/nav_edge.dart';
+import 'package:compass_3d/domain/models/nav_node.dart';
+import 'package:compass_3d/domain/models/position_estimate.dart';
+import 'package:compass_3d/domain/use_cases/canvass_building_use_case.dart';
+import 'package:compass_3d/domain/use_cases/track_live_position_use_case.dart';
 
 /// Manages the real-time building surveying and ARCore canvassing workflow.
 class CanvassingViewModel extends ChangeNotifier {
