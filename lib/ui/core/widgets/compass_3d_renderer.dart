@@ -116,11 +116,11 @@ class _Arrow3DPainter extends CustomPainter {
 
     // Shaded facets
     final leftFacePaint = Paint()
-      ..color = AppColors.cyanAccent.withValues(alpha: 0.95)
+      ..color = AppColors.cyanAccent.withOpacity(0.95)
       ..style = PaintingStyle.fill;
 
     final rightFacePaint = Paint()
-      ..color = AppColors.cobaltBlue.withValues(alpha: 0.95)
+      ..color = AppColors.cobaltBlue.withOpacity(0.95)
       ..style = PaintingStyle.fill;
 
     // Draw Left Facet

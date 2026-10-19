@@ -64,7 +64,7 @@ class _FloorPlanPainter extends CustomPainter {
 
     // Grid lines for scale reference
     final gridPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.05)
+      ..color = Colors.white.withOpacity(0.05)
       ..strokeWidth = 1.0;
     const gridSpacing = 5.0 * scale; // 5 meters grid
     for (var x = 0.0; x < size.width; x += gridSpacing) {
@@ -126,7 +126,7 @@ class _FloorPlanPainter extends CustomPainter {
     // Draw User Location Pin
     final userScreenPos = center + Offset(userPos.x * scale, -userPos.y * scale);
     final userHaloPaint = Paint()
-      ..color = AppColors.cyanAccent.withValues(alpha: 0.25)
+      ..color = AppColors.cyanAccent.withOpacity(0.25)
       ..style = PaintingStyle.fill;
     canvas.drawCircle(userScreenPos, 14.0, userHaloPaint);
 

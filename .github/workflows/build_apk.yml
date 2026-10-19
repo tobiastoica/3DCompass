@@ -40,6 +40,9 @@ jobs:
       - name: Run Test Suite
         run: dart test/run_all_tests.dart
 
+      - name: Flutter Analyze
+        run: flutter analyze
+
       - name: Build Android APK
         run: |
           set -o pipefail

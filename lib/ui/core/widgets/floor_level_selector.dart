@@ -26,7 +26,7 @@ class FloorLevelSelector extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: AppColors.surfaceDark.withValues(alpha: 0.9),
+        color: AppColors.surfaceDark.withOpacity(0.9),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Colors.white12),
       ),

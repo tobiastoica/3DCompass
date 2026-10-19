@@ -33,9 +33,9 @@ class ArViewfinderWidget extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: AppColors.surfaceDark.withValues(alpha: 0.85),
+                color: AppColors.surfaceDark.withOpacity(0.85),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppColors.cyanAccent.withValues(alpha: 0.4)),
+                border: Border.all(color: AppColors.cyanAccent.withOpacity(0.4)),
               ),
               child: Row(
                 children: [
@@ -67,7 +67,7 @@ class _ReticlePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = AppColors.cyanAccent.withValues(alpha: 0.6)
+      ..color = AppColors.cyanAccent.withOpacity(0.6)
       ..strokeWidth = 2.0
       ..style = PaintingStyle.stroke;
 

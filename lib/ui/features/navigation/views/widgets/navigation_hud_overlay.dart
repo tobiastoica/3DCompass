@@ -30,7 +30,7 @@ class NavigationHudOverlay extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.surfaceDark.withValues(alpha: 0.92),
+        color: AppColors.surfaceDark.withOpacity(0.92),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Colors.white12),
         boxShadow: const [
