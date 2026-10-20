@@ -111,7 +111,15 @@ class NavigationViewModel extends ChangeNotifier {
   /// Starts listening to sensor fusion updates.
   void startNavigation() {
     _posSub = _trackLivePositionUseCase.execute().listen((estimate) {
-      _userPosition = estimate.position;
+      var currentPos = estimate.position;
+      final building = _navigationRepository.activeBuilding;
+
+      // Apply 3D Map Constraint: Landmark Snap & Corridor Wall Bounding
+      if (building != null && building.navGraph.nodes.isNotEmpty) {
+        currentPos = _applyLayoutConstraint(currentPos, estimate.floorIndex, building);
+      }
+
+      _userPosition = currentPos;
       _userHeadingRad = estimate.orientation.azimuthRadians;
       _currentFloor = estimate.floorIndex;
       _accuracyMeters = estimate.horizontalAccuracyMeters;
@@ -119,6 +127,79 @@ class NavigationViewModel extends ChangeNotifier {
       _updateInstruction();
       notifyListeners();
     });
+  }
+
+  Coordinates3D _applyLayoutConstraint(
+    Coordinates3D rawPos,
+    int floorIndex,
+    Building3DModel building,
+  ) {
+    final floorNodes = building.navGraph.getNodesForFloor(floorIndex);
+    if (floorNodes.isEmpty) return rawPos;
+
+    // 1. Landmark Relocalization: Snap to mapped rooms / doorways / stairwells when in close proximity
+    for (final node in floorNodes) {
+      final dist = rawPos.horizontalDistanceTo(node.position);
+      // If within 1.2m of a named landmark node, snap position and eliminate dead-reckoning drift
+      if (dist < 1.2) {
+        final snapped = Coordinates3D(x: node.position.x, y: node.position.y, z: rawPos.z);
+        _sensorFusionRepository.resetPosition(snapped);
+        return snapped;
+      }
+    }
+
+    // 2. Corridor Wall Bounding: Constrain user position within mapped hallway corridor segments
+    final floorEdges = building.navGraph.allEdges.where((e) {
+      final s = building.navGraph.nodes[e.sourceNodeId];
+      final t = building.navGraph.nodes[e.targetNodeId];
+      return s != null && t != null && s.floorIndex == floorIndex && t.floorIndex == floorIndex;
+    }).toList();
+
+    if (floorEdges.isEmpty) return rawPos;
+
+    Coordinates3D? bestProjection;
+    var minPerpDist = double.infinity;
+
+    for (final edge in floorEdges) {
+      final a = building.navGraph.nodes[edge.sourceNodeId]!.position;
+      final b = building.navGraph.nodes[edge.targetNodeId]!.position;
+
+      final dx = b.x - a.x;
+      final dy = b.y - a.y;
+      final segLengthSq = dx * dx + dy * dy;
+
+      if (segLengthSq == 0) continue;
+
+      // Project rawPos onto segment AB
+      final t = (((rawPos.x - a.x) * dx + (rawPos.y - a.y) * dy) / segLengthSq).clamp(0.0, 1.0);
+      final projX = a.x + t * dx;
+      final projY = a.y + t * dy;
+
+      final perpDist = math.sqrt(
+        (rawPos.x - projX) * (rawPos.x - projX) + (rawPos.y - projY) * (rawPos.y - projY),
+      );
+
+      if (perpDist < minPerpDist) {
+        minPerpDist = perpDist;
+        bestProjection = Coordinates3D(x: projX, y: projY, z: rawPos.z);
+      }
+    }
+
+    if (bestProjection != null) {
+      const maxCorridorHalfWidth = 1.4; // 1.4 meters (standard corridor half-width)
+
+      // If user drifts outside the physical corridor walls, clamp them back inside
+      if (minPerpDist > maxCorridorHalfWidth) {
+        final pullFactor = maxCorridorHalfWidth / minPerpDist;
+        final clampedX = bestProjection.x + (rawPos.x - bestProjection.x) * pullFactor;
+        final clampedY = bestProjection.y + (rawPos.y - bestProjection.y) * pullFactor;
+        final clampedPos = Coordinates3D(x: clampedX, y: clampedY, z: rawPos.z);
+        _sensorFusionRepository.resetPosition(clampedPos);
+        return clampedPos;
+      }
+    }
+
+    return rawPos;
   }
 
   /// Selects a target destination node and computes the shortest 3D route.
