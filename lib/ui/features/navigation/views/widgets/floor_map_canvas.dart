@@ -4,9 +4,9 @@ import 'package:compass_3d/domain/models/coordinates_3d.dart';
 import 'package:compass_3d/domain/models/navigation_path.dart';
 import 'package:compass_3d/ui/core/theme/app_colors.dart';
 
-/// Renders a dynamic vector canvas representing the active building floor plan with readable labels.
-class FloorMapCanvas extends StatelessWidget {
-  /// Creates a floor map canvas.
+/// Renders an interactive vector canvas representing the active building floor plan with pan, zoom, and readable labels.
+class FloorMapCanvas extends StatefulWidget {
+  /// Creates an interactive floor map canvas.
   const FloorMapCanvas({
     super.key,
     required this.building,
@@ -28,18 +28,81 @@ class FloorMapCanvas extends StatelessWidget {
   final NavigationPath? activePath;
 
   @override
+  State<FloorMapCanvas> createState() => _FloorMapCanvasState();
+}
+
+class _FloorMapCanvasState extends State<FloorMapCanvas> {
+  final TransformationController _transformationController = TransformationController();
+
+  void _recenter() {
+    _transformationController.value = Matrix4.identity();
+  }
+
+  @override
+  void dispose() {
+    _transformationController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Container(
-      color: const Color(0xFF0A0F1D),
-      child: CustomPaint(
-        size: Size.infinite,
-        painter: _FloorPlanPainter(
-          building: building,
-          floorIndex: activeFloorIndex,
-          userPos: userPosition,
-          path: activePath,
+    return Stack(
+      children: [
+        // Pan & Zoom Interactive Canvas
+        InteractiveViewer(
+          transformationController: _transformationController,
+          minScale: 0.35,
+          maxScale: 6.0,
+          boundaryMargin: const EdgeInsets.all(1500.0),
+          constrained: true,
+          child: SizedBox.expand(
+            child: Container(
+              color: const Color(0xFF0A0F1D),
+              child: CustomPaint(
+                painter: _FloorPlanPainter(
+                  building: widget.building,
+                  floorIndex: widget.activeFloorIndex,
+                  userPos: widget.userPosition,
+                  path: widget.activePath,
+                ),
+              ),
+            ),
+          ),
         ),
-      ),
+
+        // Recenter Floating Button
+        Positioned(
+          right: 16,
+          bottom: 235,
+          child: Material(
+            elevation: 8,
+            shape: const CircleBorder(),
+            color: AppColors.surfaceDark.withOpacity(0.92),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: _recenter,
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AppColors.cyanAccent.withOpacity(0.6),
+                    width: 1.5,
+                  ),
+                  boxShadow: const [
+                    BoxShadow(color: Colors.black45, blurRadius: 8, offset: Offset(0, 2)),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.my_location,
+                  color: AppColors.cyanAccent,
+                  size: 22,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
