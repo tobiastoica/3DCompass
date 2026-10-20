@@ -115,9 +115,9 @@ class CanvassingViewModel extends ChangeNotifier {
       _stepCount++;
       // In survey mode, horizontal tracking comes from PDR, while activeFloor stays pinned to user selection
       _currentPosition = Coordinates3D(
-        estimate.position.x,
-        estimate.position.y,
-        _activeFloor * 3.6,
+        x: estimate.position.x,
+        y: estimate.position.y,
+        z: _activeFloor * 3.6,
       );
 
       // Automatically place corridor waypoints every 3 meters

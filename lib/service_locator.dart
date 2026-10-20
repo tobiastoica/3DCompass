@@ -67,7 +67,7 @@ class ServiceLocator {
     final pressureStream = barometerEventStream()
         .map((e) => e.pressure)
         .handleError((error) {
-      logger.log('BAROMETER_ERROR', error.toString());
+      logger.log(LogLevel.error, 'BAROMETER', error.toString());
     });
     altimeterService = BarometricAltimeterService(pressureStream: pressureStream);
     pdrService = InertiaPdrService();
