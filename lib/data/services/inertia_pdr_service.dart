@@ -66,8 +66,8 @@ class InertiaPdrService {
   /// Starts listening to sensor feeds and analyzing gait kinematics.
   void start() {
     _magSub = _magnetometerStream.listen((mag) {
-      // Approximate horizontal heading from magnetometer
-      _currentHeadingRadians = math.atan2(mag.y, mag.x);
+      // Cartesian horizontal heading from magnetometer (East = 0, North = pi/2)
+      _currentHeadingRadians = math.atan2(mag.y, -mag.x);
     });
 
     _accelSub = _accelerometerStream.listen((accel) {

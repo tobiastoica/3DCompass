@@ -34,13 +34,50 @@ class NavigationPath {
     return total;
   }
 
-  /// Identifies the next waypoint along the path from [currentPosition].
-  NavNode? getNextWaypoint(Coordinates3D currentPosition, {double thresholdMeters = 2.0}) {
-    for (final wp in _waypoints) {
-      if (currentPosition.distanceTo(wp.position) > thresholdMeters) {
-        return wp;
+  /// Identifies the next forward waypoint along the path from [currentPosition].
+  NavNode? getNextWaypoint(Coordinates3D currentPosition, {double thresholdMeters = 2.5}) {
+    if (_waypoints.isEmpty) return null;
+    if (_waypoints.length == 1) return _waypoints.first;
+
+    // 1. Find the path segment closest to currentPosition
+    var bestSegIndex = 0;
+    var minSegDist = double.infinity;
+
+    for (var i = 0; i < _waypoints.length - 1; i++) {
+      final a = _waypoints[i].position;
+      final b = _waypoints[i + 1].position;
+      final dx = b.x - a.x;
+      final dy = b.y - a.y;
+      final dz = b.z - a.z;
+      final segLenSq = dx * dx + dy * dy + dz * dz;
+
+      if (segLenSq == 0) continue;
+
+      final t = (((currentPosition.x - a.x) * dx +
+                  (currentPosition.y - a.y) * dy +
+                  (currentPosition.z - a.z) * dz) / segLenSq).clamp(0.0, 1.0);
+
+      final px = a.x + t * dx;
+      final py = a.y + t * dy;
+      final pz = a.z + t * dz;
+
+      final d = currentPosition.distanceTo(Coordinates3D(x: px, y: py, z: pz));
+      if (d < minSegDist) {
+        minSegDist = d;
+        bestSegIndex = i;
       }
     }
-    return destinationNode;
+
+    // Target the end of the current active segment
+    var targetIndex = bestSegIndex + 1;
+
+    // If already within threshold of that waypoint and not at destination, advance forward
+    if (targetIndex < _waypoints.length - 1) {
+      if (currentPosition.distanceTo(_waypoints[targetIndex].position) < thresholdMeters) {
+        targetIndex++;
+      }
+    }
+
+    return _waypoints[targetIndex];
   }
 }

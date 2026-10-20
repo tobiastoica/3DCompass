@@ -12,6 +12,7 @@ import '../lib/domain/models/floor_level.dart';
 import '../lib/domain/models/nav_edge.dart';
 import '../lib/domain/models/nav_graph_3d.dart';
 import '../lib/domain/models/nav_node.dart';
+import '../lib/domain/models/navigation_path.dart';
 import '../lib/domain/use_cases/compute_shortest_3d_path_use_case.dart';
 
 Future<void> main() async {
@@ -150,6 +151,30 @@ Future<void> main() async {
     expect(altimeter.estimateFloorIndex(-3.6, floorHeightMeters: 3.6) == -1, '-3.6m is Basement -1');
   });
 
+  runTest('Automatically detects floor ascent at >2.0m rise and recalibrates on return', () {
+    final altimeter = BarometricAltimeterService();
+    altimeter.latchBaseline(1008.79);
+
+    expect(altimeter.activeFloorIndex == 0, 'Starts on floor 0');
+
+    // Small hand fluctuation of 0.8m remains Floor 0
+    altimeter.calculateRelativeAltitude(1008.69);
+    expect(altimeter.activeFloorIndex == 0, '0.8m is still Floor 0');
+
+    // Climbing stairs past +2.0m (pressure drops to 1008.45 hPa -> ~2.8m rise)
+    altimeter.calculateRelativeAltitude(1008.45);
+    expect(altimeter.activeFloorIndex == 1, 'Climbing >2m switches to Floor 1');
+
+    // Reaching Floor 1 landing at +4.0m (1008.28 hPa)
+    altimeter.calculateRelativeAltitude(1008.28);
+    expect(altimeter.activeFloorIndex == 1, 'Floor 1 maintained');
+
+    // Descending stairs back towards Floor 0 (pressure rises back to 1008.75 hPa)
+    altimeter.calculateRelativeAltitude(1008.75);
+    expect(altimeter.activeFloorIndex == 0, 'Descent below -2m threshold switches back to Floor 0');
+    expectCloseTo(altimeter.entrancePressureHpa!, 1008.75, 0.001, 'Floor 0 datum reset on descent return');
+  });
+
   // =========================================================================
   // 3. 3D A* MULTI-FLOOR PATHFINDING TESTS
   // =========================================================================
@@ -239,6 +264,30 @@ Future<void> main() async {
     final ids = path.waypoints.map((w) => w.id).toList();
     expect(ids.contains('f0_elevator'), 'Must traverse elevator');
     expect(!ids.contains('f0_stairs'), 'Must NOT traverse stairs when wheelchair mode is on');
+  });
+
+  runTest('getNextWaypoint guides forward along path without backward flipping', () {
+    final path = NavigationPath(waypoints: [
+      const NavNode(id: 'w0', name: 'Start', position: Coordinates3D(x: 0, y: 0, z: 0), floorIndex: 0, type: NodeType.doorway),
+      const NavNode(id: 'w1', name: 'Corridor 1', position: Coordinates3D(x: 10, y: 0, z: 0), floorIndex: 0, type: NodeType.hallway),
+      const NavNode(id: 'w2', name: 'Corridor 2', position: Coordinates3D(x: 20, y: 0, z: 0), floorIndex: 0, type: NodeType.hallway),
+      const NavNode(id: 'w3', name: 'Room 101', position: Coordinates3D(x: 30, y: 0, z: 0), floorIndex: 0, type: NodeType.room),
+    ]);
+
+    // User at start (0, 0)
+    expect(path.getNextWaypoint(const Coordinates3D(x: 0, y: 0, z: 0))?.id == 'w1', 'At start, points forward to w1');
+
+    // User walks halfway to w1 at (5, 0) - MUST NOT flip backward to w0!
+    expect(path.getNextWaypoint(const Coordinates3D(x: 5, y: 0, z: 0))?.id == 'w1', 'Mid-corridor, still points forward to w1');
+
+    // User reaches w1 at (10, 0)
+    expect(path.getNextWaypoint(const Coordinates3D(x: 10, y: 0, z: 0))?.id == 'w2', 'At w1, advances forward to w2');
+
+    // User between w1 and w2 at (15, 0)
+    expect(path.getNextWaypoint(const Coordinates3D(x: 15, y: 0, z: 0))?.id == 'w2', 'Advances forward to w2');
+
+    // User reaches destination at (30, 0)
+    expect(path.getNextWaypoint(const Coordinates3D(x: 30, y: 0, z: 0))?.id == 'w3', 'At destination, target is w3');
   });
 
   // =========================================================================
