@@ -130,7 +130,7 @@ class SensorFusionRepositoryImpl implements SensorFusionRepository {
       _currentFloorIndex = _altimeter.estimateFloorIndex(relativeZ);
 
       _logger?.logBarometerUpdate(
-        currentPressureHpa: _altimeter.entrancePressureHpa ?? 0.0,
+        currentPressureHpa: _altimeter.lastRawPressureHpa ?? _altimeter.entrancePressureHpa ?? 0.0,
         relativeAltitudeMeters: relativeZ,
         floorIndex: _currentFloorIndex,
       );

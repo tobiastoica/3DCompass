@@ -12,6 +12,7 @@ class BarometricAltimeterService {
 
   final Stream<double>? _pressureStream;
   double? _entrancePressureHpa;
+  double? _lastRawPressureHpa;
   double _lastFilteredAltitude = 0.0;
   static const double _lowPassAlpha = 0.2; // Exponential moving average smoothing
 
@@ -20,6 +21,9 @@ class BarometricAltimeterService {
 
   /// The latched entrance pressure baseline in hectopascals.
   double? get entrancePressureHpa => _entrancePressureHpa;
+
+  /// The most recent ambient barometric pressure measured in hectopascals.
+  double? get lastRawPressureHpa => _lastRawPressureHpa;
 
   /// Latches [pressureHpa] as the ground entrance datum ($z = 0.0\text{ m}$).
   void latchBaseline(double pressureHpa) {
@@ -31,7 +35,11 @@ class BarometricAltimeterService {
   ///
   /// Uses the international standard atmosphere hypsometric formulation.
   double calculateRelativeAltitude(double pressureHpa) {
-    final p0 = _entrancePressureHpa ?? pressureHpa;
+    _lastRawPressureHpa = pressureHpa;
+    if (_entrancePressureHpa == null) {
+      _entrancePressureHpa = pressureHpa;
+    }
+    final p0 = _entrancePressureHpa!;
     if (p0 <= 0.0) return 0.0;
     return 44330.0 * (1.0 - math.pow(pressureHpa / p0, 1.0 / 5.255));
   }
