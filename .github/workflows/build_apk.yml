@@ -44,7 +44,7 @@ jobs:
       - name: Build Android APK
         run: |
           set -o pipefail
-          flutter build apk --release -v 2>&1 | tee build.log
+          flutter build apk --release --build-number=${{ github.run_number }} --build-name=1.0.${{ github.run_number }} -v 2>&1 | tee build.log
 
       - name: Prepare Failure Diagnostics
         if: failure()

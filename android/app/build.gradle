@@ -23,6 +23,15 @@ if (flutterVersionName == null) {
 }
 
 android {
+    signingConfigs {
+        release {
+            storeFile file("release.keystore")
+            storePassword "compass3d_secret"
+            keyAlias "compass3d"
+            keyPassword "compass3d_secret"
+        }
+    }
+
     namespace "com.compass3d.indoor"
     compileSdk 34
     ndkVersion flutter.ndkVersion
@@ -50,7 +59,7 @@ android {
 
     buildTypes {
         release {
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.release
             minifyEnabled false
             shrinkResources false
         }

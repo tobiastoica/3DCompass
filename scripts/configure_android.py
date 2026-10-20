@@ -3,6 +3,7 @@
 
 import os
 import re
+import shutil
 
 def configure_manifest():
     manifest_path = os.path.join("android", "app", "src", "main", "AndroidManifest.xml")
@@ -43,6 +44,9 @@ def configure_manifest():
     if "requestLegacyExternalStorage" not in content:
         content = content.replace("<application", '<application android:requestLegacyExternalStorage="true"')
 
+    if "hasFragileUserData" not in content:
+        content = content.replace("<application", '<application android:hasFragileUserData="true"')
+
     if "com.google.ar.core" not in content:
         ar_meta = '\n        <meta-data android:name="com.google.ar.core" android:value="optional" />\n'
         content = content.replace("</activity>", "</activity>" + ar_meta)
@@ -52,6 +56,14 @@ def configure_manifest():
     print("Configured AndroidManifest.xml successfully.")
 
 def configure_build_gradle():
+    # 1. Copy persistent release keystore into android/app/ if available
+    src_keystore = os.path.join("keystore", "release.keystore")
+    target_keystore = os.path.join("android", "app", "release.keystore")
+    if os.path.exists(src_keystore):
+        os.makedirs(os.path.dirname(target_keystore), exist_ok=True)
+        shutil.copy2(src_keystore, target_keystore)
+        print(f"Copied {src_keystore} to {target_keystore}")
+
     candidates = [
         os.path.join("android", "app", "build.gradle"),
         os.path.join("android", "app", "build.gradle.kts"),
@@ -80,6 +92,36 @@ def configure_build_gradle():
         content = re.sub(r'targetSdkVersion\s+[^\n]+', 'targetSdkVersion 34', content)
         content = re.sub(r'targetSdk\s*=\s*[^\n]+', 'targetSdk = 34', content)
         content = re.sub(r'targetSdk\s+flutter\.[^\n]+', 'targetSdk = 34', content)
+
+        # Configure signingConfigs.release
+        if gradle_path.endswith('.kts'):
+            if 'signingConfigs {' not in content:
+                signing_block = """
+    signingConfigs {
+        create("release") {
+            storeFile = file("release.keystore")
+            storePassword = "compass3d_secret"
+            keyAlias = "compass3d"
+            keyPassword = "compass3d_secret"
+        }
+    }
+"""
+                content = content.replace("android {", "android {" + signing_block)
+            content = re.sub(r'signingConfig\s*=\s*signingConfigs\.getByName\("debug"\)', 'signingConfig = signingConfigs.getByName("release")', content)
+        else:
+            if 'signingConfigs {' not in content:
+                signing_block = """
+    signingConfigs {
+        release {
+            storeFile file("release.keystore")
+            storePassword "compass3d_secret"
+            keyAlias "compass3d"
+            keyPassword "compass3d_secret"
+        }
+    }
+"""
+                content = content.replace("android {", "android {" + signing_block)
+            content = re.sub(r'signingConfig\s+signingConfigs\.debug', 'signingConfig signingConfigs.release', content)
 
         with open(gradle_path, "w", encoding="utf-8") as f:
             f.write(content)

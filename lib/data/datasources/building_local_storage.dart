@@ -26,6 +26,19 @@ class BuildingLocalStorage {
     return mapsDir;
   }
 
+  /// Retrieves the external persistent backup directory in the public Downloads folder.
+  Future<Directory?> get _externalBackupDirectory async {
+    try {
+      final extDir = Directory('/storage/emulated/0/Download/3DCompass_Maps');
+      if (!await extDir.exists()) {
+        await extDir.create(recursive: true);
+      }
+      return extDir;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Writes [building] as a binary `.3dnav` file and JSON metadata to local storage.
   Future<void> saveBuilding(Building3DModel building) async {
     final dir = await _mapsDirectory;
@@ -55,12 +68,46 @@ class BuildingLocalStorage {
       },
     };
     await metaFile.writeAsString(jsonEncode(meta), flush: true);
+
+    // Also persist an external backup in the phone's Downloads directory
+    // so data is never lost even if the user uninstalls the application
+    try {
+      final extDir = await _externalBackupDirectory;
+      if (extDir != null) {
+        final extFile = File('${extDir.path}/${building.id}.3dnav');
+        await extFile.writeAsBytes(bytes, flush: true);
+        final extMetaFile = File('${extDir.path}/${building.id}.meta.json');
+        await extMetaFile.writeAsString(jsonEncode(meta), flush: true);
+      }
+    } catch (_) {
+      // Gracefully continue if external storage is inaccessible
+    }
   }
 
   /// Loads and deserializes a building by its [id].
   Future<Building3DModel?> loadBuilding(String id, String name) async {
     final dir = await _mapsDirectory;
     final file = File('${dir.path}/$id.3dnav');
+    if (!await file.exists()) {
+      // Try restoring from external persistent backup
+      try {
+        final extDir = await _externalBackupDirectory;
+        if (extDir != null) {
+          final extFile = File('${extDir.path}/$id.3dnav');
+          if (await extFile.exists()) {
+            await extFile.copy(file.path);
+            final extMeta = File('${extDir.path}/$id.meta.json');
+            final localMeta = File('${dir.path}/$id.meta.json');
+            if (await extMeta.exists()) {
+              await extMeta.copy(localMeta.path);
+            }
+          }
+        }
+      } catch (_) {
+        // Fallback
+      }
+    }
+
     if (!await file.exists()) {
       return null;
     }
@@ -135,19 +182,56 @@ class BuildingLocalStorage {
     if (await metaFile.exists()) {
       await metaFile.delete();
     }
+
+    try {
+      final extDir = await _externalBackupDirectory;
+      if (extDir != null) {
+        final extFile = File('${extDir.path}/$id.3dnav');
+        if (await extFile.exists()) await extFile.delete();
+        final extMetaFile = File('${extDir.path}/$id.meta.json');
+        if (await extMetaFile.exists()) await extMetaFile.delete();
+      }
+    } catch (_) {}
   }
 
-  /// Lists all building IDs currently saved on disk.
+  /// Lists all building IDs currently saved on disk, syncing from external backup if needed.
   Future<List<String>> listBuildingIds() async {
     final dir = await _mapsDirectory;
+    final ids = <String>{};
+
+    // Sync from external backup directory if present (e.g. after fresh reinstall)
+    try {
+      final extDir = await _externalBackupDirectory;
+      if (extDir != null && await extDir.exists()) {
+        final extEntities = await extDir.list().toList();
+        for (final entity in extEntities) {
+          if (entity is File && entity.path.endsWith('.3dnav')) {
+            final filename = entity.uri.pathSegments.last;
+            final id = filename.replaceAll('.3dnav', '');
+            ids.add(id);
+
+            // Restore into app local directory if missing
+            final localFile = File('${dir.path}/$filename');
+            if (!await localFile.exists()) {
+              await entity.copy(localFile.path);
+              final extMeta = File('${extDir.path}/$id.meta.json');
+              final localMeta = File('${dir.path}/$id.meta.json');
+              if (await extMeta.exists() && !await localMeta.exists()) {
+                await extMeta.copy(localMeta.path);
+              }
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
     final entities = await dir.list().toList();
-    final ids = <String>[];
     for (final entity in entities) {
       if (entity is File && entity.path.endsWith('.3dnav')) {
         final filename = entity.uri.pathSegments.last;
         ids.add(filename.replaceAll('.3dnav', ''));
       }
     }
-    return ids;
+    return ids.toList();
   }
 }
