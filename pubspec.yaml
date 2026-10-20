@@ -14,6 +14,9 @@ dependencies:
   # Official Flutter Community sensor plugins
   sensors_plus: ^6.1.1
 
+  # Official Flutter camera plugin for live AR canvassing
+  camera: ^0.11.1
+
   # Google Premier Partner location and permission plugins
   geolocator: ^13.0.2
   permission_handler: ^11.3.1

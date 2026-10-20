@@ -1,3 +1,4 @@
+import 'package:sensors_plus/sensors_plus.dart';
 import 'data/datasources/binary_nav_serializer.dart';
 import 'data/datasources/building_local_storage.dart';
 import 'data/repositories/building_repository_impl.dart';
@@ -63,7 +64,12 @@ class ServiceLocator {
 
     serializer = BinaryNavSerializer();
     localStorage = BuildingLocalStorage(serializer: serializer);
-    altimeterService = BarometricAltimeterService();
+    final pressureStream = barometerEventStream()
+        .map((e) => e.pressure)
+        .handleError((error) {
+      logger.log('BAROMETER_ERROR', error.toString());
+    });
+    altimeterService = BarometricAltimeterService(pressureStream: pressureStream);
     pdrService = InertiaPdrService();
     gpsService = FaintGpsService();
     ekf = ExtendedKalmanFilter();

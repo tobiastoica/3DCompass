@@ -47,9 +47,15 @@ class SensorFusionRepositoryImpl implements SensorFusionRepository {
 
   @override
   Future<double> captureCurrentPressure() async {
-    // Read the first available event from the barometer stream
-    final event = await barometerEventStream().first;
-    return event.pressure;
+    try {
+      final event = await barometerEventStream()
+          .first
+          .timeout(const Duration(milliseconds: 1500));
+      return event.pressure;
+    } catch (_) {
+      // Standard sea-level pressure fallback if hardware barometer absent
+      return 1013.25;
+    }
   }
 
   @override

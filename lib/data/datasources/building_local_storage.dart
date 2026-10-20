@@ -1,9 +1,13 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import '../../domain/models/building_3d_model.dart';
+import '../../domain/models/floor_level.dart';
+import '../../domain/models/nav_graph_3d.dart';
+import '../../domain/models/nav_node.dart';
 import 'binary_nav_serializer.dart';
 
-/// Manages filesystem persistence of `.3dnav` building models in local storage.
+/// Manages filesystem persistence of `.3dnav` binary models and metadata in local storage.
 class BuildingLocalStorage {
   /// Creates a local storage manager.
   BuildingLocalStorage({
@@ -22,7 +26,7 @@ class BuildingLocalStorage {
     return mapsDir;
   }
 
-  /// Writes [building] as a binary `.3dnav` file to local storage.
+  /// Writes [building] as a binary `.3dnav` file and JSON metadata to local storage.
   Future<void> saveBuilding(Building3DModel building) async {
     final dir = await _mapsDirectory;
     final file = File('${dir.path}/${building.id}.3dnav');
@@ -33,6 +37,24 @@ class BuildingLocalStorage {
     );
 
     await file.writeAsBytes(bytes, flush: true);
+
+    // Save metadata companion file to preserve all human-readable room and floor names
+    final metaFile = File('${dir.path}/${building.id}.meta.json');
+    final meta = {
+      'id': building.id,
+      'name': building.name,
+      'floors': building.floors.map((f) => {
+        'floorIndex': f.floorIndex,
+        'name': f.name,
+        'baseElevationMeters': f.baseElevationMeters,
+        'floorHeightMeters': f.floorHeightMeters,
+      }).toList(),
+      'nodeNames': {
+        for (final entry in building.navGraph.nodes.entries)
+          entry.key: entry.value.name,
+      },
+    };
+    await metaFile.writeAsString(jsonEncode(meta), flush: true);
   }
 
   /// Loads and deserializes a building by its [id].
@@ -46,23 +68,72 @@ class BuildingLocalStorage {
     final bytes = await file.readAsBytes();
     final decoded = _serializer.deserialize(bytes);
 
+    var floors = decoded.floors;
+    var buildingName = name;
+    final nodeNameMap = <String, String>{};
+
+    final metaFile = File('${dir.path}/$id.meta.json');
+    if (await metaFile.exists()) {
+      try {
+        final metaContent = await metaFile.readAsString();
+        final metaJson = jsonDecode(metaContent) as Map<String, dynamic>;
+        if (metaJson['name'] is String) buildingName = metaJson['name'] as String;
+        if (metaJson['floors'] is List) {
+          floors = (metaJson['floors'] as List).map((f) {
+            final fm = f as Map<String, dynamic>;
+            return FloorLevel(
+              floorIndex: fm['floorIndex'] as int,
+              name: fm['name'] as String,
+              baseElevationMeters: (fm['baseElevationMeters'] as num).toDouble(),
+              floorHeightMeters: (fm['floorHeightMeters'] as num).toDouble(),
+            );
+          }).toList();
+        }
+        if (metaJson['nodeNames'] is Map) {
+          final nMap = metaJson['nodeNames'] as Map;
+          for (final k in nMap.keys) {
+            nodeNameMap[k.toString()] = nMap[k].toString();
+          }
+        }
+      } catch (_) {
+        // Fallback to binary values if metadata read fails
+      }
+    }
+
+    // Restore human-readable node names
+    final restoredNodes = <String, NavNode>{};
+    for (final node in decoded.graph.nodes.values) {
+      final restoredName = nodeNameMap[node.id] ?? node.name;
+      restoredNodes[node.id] = NavNode(
+        id: node.id,
+        name: restoredName,
+        position: node.position,
+        floorIndex: node.floorIndex,
+        type: node.type,
+      );
+    }
+
     return Building3DModel(
       id: id,
-      name: name,
-      floors: decoded.floors,
-      navGraph: decoded.graph,
-      entranceAnchors: decoded.graph.nodes.values
+      name: buildingName,
+      floors: floors,
+      navGraph: NavGraph3D(nodes: restoredNodes, edges: decoded.graph.allEdges),
+      entranceAnchors: restoredNodes.values
           .where((n) => n.type.name == 'doorway')
           .toList(),
     );
   }
 
-  /// Deletes the `.3dnav` file associated with [id].
+  /// Deletes the building files associated with [id].
   Future<void> deleteBuilding(String id) async {
     final dir = await _mapsDirectory;
     final file = File('${dir.path}/$id.3dnav');
     if (await file.exists()) {
       await file.delete();
+    }
+    final metaFile = File('${dir.path}/$id.meta.json');
+    if (await metaFile.exists()) {
+      await metaFile.delete();
     }
   }
 

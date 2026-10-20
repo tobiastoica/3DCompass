@@ -155,12 +155,12 @@ class _NavigationScreenState extends State<NavigationScreen> {
           activePath: widget.viewModel.activePath,
         ),
 
-        // Top Floor Level Selector
+        // Top Floor Level Selector - Full screen width for complete horizontal scrolling
         if (building != null && building.floors.isNotEmpty)
           Positioned(
-            top: 12,
+            top: 10,
             left: 12,
-            right: 170, // Leave space for HUD
+            right: 12,
             child: FloorLevelSelector(
               floors: building.floors,
               activeFloorIndex: _viewingFloorIndex,
@@ -168,9 +168,9 @@ class _NavigationScreenState extends State<NavigationScreen> {
             ),
           ),
 
-        // Floating 3D Compass HUD in top-right
+        // Floating 3D Compass HUD in top-right, positioned cleanly below floor selector
         Positioned(
-          top: 12,
+          top: 66,
           right: 12,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 150, maxHeight: 160),

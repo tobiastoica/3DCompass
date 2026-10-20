@@ -4,7 +4,7 @@ import '../view_models/canvassing_view_model.dart';
 import 'widgets/ar_viewfinder_widget.dart';
 import 'widgets/canvass_action_sheet.dart';
 
-/// Screen where user surveys a building by walking with ARCore and sensors.
+/// Screen where user surveys a building by walking with camera, AR HUD, and sensors.
 class CanvassingScreen extends StatefulWidget {
   /// Creates a canvassing screen.
   const CanvassingScreen({
@@ -21,6 +21,7 @@ class CanvassingScreen extends StatefulWidget {
 
 class _CanvassingScreenState extends State<CanvassingScreen> {
   final _buildingNameController = TextEditingController(text: 'Science Hall');
+  int _initialFloorCount = 4; // Default to 4 floors as user needs multi-floor
 
   @override
   void dispose() {
@@ -38,21 +39,28 @@ class _CanvassingScreenState extends State<CanvassingScreen> {
         }
 
         return Scaffold(
-          backgroundColor: AppColors.backgroundDark,
+          backgroundColor: Colors.black,
           appBar: AppBar(
+            backgroundColor: Colors.black.withOpacity(0.85),
             title: Text(
               'Surveying: ${widget.viewModel.buildingName}',
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
-            elevation: 2,
+            elevation: 0,
           ),
           body: Stack(
-            fit: StackFit.expand, // Ensures the Stack fills the entire screen
+            fit: StackFit.expand,
             children: [
+              // 1. Live Camera Preview & AR Viewfinder
               ArViewfinderWidget(
                 detectedPlaneCount: widget.viewModel.detectedPlaneCount,
                 isTracking: widget.viewModel.isSurveying,
+                headingDegrees: widget.viewModel.currentHeadingDegrees,
+                activeFloor: widget.viewModel.activeFloor,
+                stepCount: widget.viewModel.stepCount,
               ),
+
+              // 2. Bottom Canvass Action Sheet with Floor Switcher
               Positioned(
                 bottom: 0,
                 left: 0,
@@ -60,8 +68,11 @@ class _CanvassingScreenState extends State<CanvassingScreen> {
                 child: SafeArea(
                   top: false,
                   child: CanvassActionSheet(
-                    waypointCount: widget.viewModel.waypointCount,
+                    floors: widget.viewModel.floors,
                     activeFloor: widget.viewModel.activeFloor,
+                    waypointCount: widget.viewModel.waypointCount,
+                    onSelectFloor: widget.viewModel.selectFloor,
+                    onAddFloor: widget.viewModel.addFloor,
                     onMarkRoom: widget.viewModel.markPointOfInterest,
                     onMarkVerticalTransition: (type, floor) =>
                         widget.viewModel.markVerticalTransition(
@@ -75,7 +86,7 @@ class _CanvassingScreenState extends State<CanvassingScreen> {
                           const SnackBar(
                             backgroundColor: AppColors.emeraldGreen,
                             content: Text(
-                              '🎉 Building 3D layout baked and saved successfully!',
+                              '🎉 Building 3D multi-floor layout saved successfully!',
                               style: TextStyle(fontWeight: FontWeight.bold),
                             ),
                           ),
@@ -123,7 +134,7 @@ class _CanvassingScreenState extends State<CanvassingScreen> {
                       ),
                     ],
                   ),
-                  child: const Icon(Icons.view_in_ar, size: 48, color: Colors.black),
+                  child: const Icon(Icons.camera_alt, size: 48, color: Colors.black),
                 ),
               ),
               const SizedBox(height: 20),
@@ -138,7 +149,7 @@ class _CanvassingScreenState extends State<CanvassingScreen> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Generate an accurate 3D offline map of your building using ARCore, accelerometer & barometer.',
+                'Uses live camera preview, motion sensors, and multi-floor tracking to map building rooms and hallways.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.white70, fontSize: 14, height: 1.4),
               ),
@@ -156,7 +167,7 @@ class _CanvassingScreenState extends State<CanvassingScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '📋 Easy 3-Step Surveying Guide:',
+                      '📋 Quick Surveying Instructions:',
                       style: TextStyle(
                         color: AppColors.cyanAccent,
                         fontWeight: FontWeight.bold,
@@ -166,20 +177,20 @@ class _CanvassingScreenState extends State<CanvassingScreen> {
                     SizedBox(height: 12),
                     _InstructionStep(
                       number: '1',
-                      title: 'Stand at the Entrance Doorway',
-                      description: 'Hold phone upright in front of you. This sets the base origin and barometer datum.',
+                      title: 'Live Camera View',
+                      description: 'Point phone camera along corridors while walking.',
                     ),
                     SizedBox(height: 10),
                     _InstructionStep(
                       number: '2',
-                      title: 'Walk Corridors & Halls',
-                      description: 'Walk forward at normal walking speed. The app automatically tracks your path.',
+                      title: 'Select Active Floor',
+                      description: 'Use the floor bar at the bottom to choose which floor you are on.',
                     ),
                     SizedBox(height: 10),
                     _InstructionStep(
                       number: '3',
-                      title: 'Mark Landmark Waypoints',
-                      description: 'Tap "Add Room" when reaching rooms, or "Stairs" when moving between floors.',
+                      title: 'Mark Rooms & Stairs',
+                      description: 'Tap "Add Room" at doors, or "Stairs / Lift" when moving up/down.',
                     ),
                   ],
                 ),
@@ -207,6 +218,49 @@ class _CanvassingScreenState extends State<CanvassingScreen> {
                   ),
                 ),
               ),
+              const SizedBox(height: 18),
+
+              // Floor Count Selector
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceDark,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.white12),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.layers, color: AppColors.cyanAccent, size: 22),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Number of Floors:', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                          Text('Pre-configures floor levels', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                    DropdownButton<int>(
+                      value: _initialFloorCount,
+                      dropdownColor: AppColors.surfaceDark,
+                      style: const TextStyle(color: AppColors.cyanAccent, fontSize: 16, fontWeight: FontWeight.bold),
+                      underline: const SizedBox(),
+                      items: [1, 2, 3, 4, 5, 6, 7, 8].map((count) {
+                        return DropdownMenuItem<int>(
+                          value: count,
+                          child: Text('$count Floors'),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() => _initialFloorCount = val);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
               const SizedBox(height: 28),
 
               ElevatedButton.icon(
@@ -222,13 +276,13 @@ class _CanvassingScreenState extends State<CanvassingScreen> {
                 onPressed: () {
                   final name = _buildingNameController.text.trim();
                   if (name.isNotEmpty) {
-                    widget.viewModel.startSurvey(name);
+                    widget.viewModel.startSurvey(name, initialFloorCount: _initialFloorCount);
                   }
                 },
-                icon: const Icon(Icons.play_arrow_rounded, size: 28),
+                icon: const Icon(Icons.camera_alt, size: 24),
                 label: const Text(
-                  'Begin Survey at Doorway',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                  'Begin Camera Survey at Doorway',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ),
               const SizedBox(height: 20),
