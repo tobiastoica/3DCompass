@@ -155,7 +155,7 @@ class CanvassingViewModel extends ChangeNotifier {
   void selectFloor(int floorIndex) {
     _activeFloor = floorIndex;
     _ensureFloorExists(floorIndex);
-    _currentPosition = Coordinates3D(_currentPosition.x, _currentPosition.y, floorIndex * 3.6);
+    _currentPosition = Coordinates3D(x: _currentPosition.x, y: _currentPosition.y, z: floorIndex * 3.6);
     notifyListeners();
   }
 
@@ -185,7 +185,7 @@ class CanvassingViewModel extends ChangeNotifier {
     final node = NavNode(
       id: id,
       name: name,
-      position: Coordinates3D(_currentPosition.x, _currentPosition.y, _activeFloor * 3.6),
+      position: Coordinates3D(x: _currentPosition.x, y: _currentPosition.y, z: _activeFloor * 3.6),
       floorIndex: _activeFloor,
       type: type,
     );
@@ -218,7 +218,7 @@ class CanvassingViewModel extends ChangeNotifier {
     final fromNode = NavNode(
       id: fromId,
       name: '${transitionType == VerticalTransition.stairs ? "Stairs" : "Elevator"} to Floor $targetFloorIndex',
-      position: Coordinates3D(_currentPosition.x, _currentPosition.y, _activeFloor * 3.6),
+      position: Coordinates3D(x: _currentPosition.x, y: _currentPosition.y, z: _activeFloor * 3.6),
       floorIndex: _activeFloor,
       type: transitionType == VerticalTransition.stairs ? NodeType.stairs : NodeType.elevator,
     );
@@ -238,7 +238,7 @@ class CanvassingViewModel extends ChangeNotifier {
     final toNode = NavNode(
       id: toId,
       name: '${transitionType == VerticalTransition.stairs ? "Stairs" : "Elevator"} from Floor $_activeFloor',
-      position: Coordinates3D(_currentPosition.x, _currentPosition.y, targetFloorIndex * 3.6),
+      position: Coordinates3D(x: _currentPosition.x, y: _currentPosition.y, z: targetFloorIndex * 3.6),
       floorIndex: targetFloorIndex,
       type: transitionType == VerticalTransition.stairs ? NodeType.stairs : NodeType.elevator,
     );
