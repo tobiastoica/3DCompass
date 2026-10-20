@@ -110,6 +110,21 @@ class CanvassingViewModel extends ChangeNotifier {
     _surveyedNodes[doorwayNode.id] = doorwayNode;
     _lastWalkNode = doorwayNode;
 
+    // Emit initial structural entrance plane
+    _arCoreService.emitPlane(ArPlaneData(
+      id: 'plane_entrance_0',
+      center: doorwayNode.position,
+      extentX: 2.5,
+      extentZ: 2.5,
+      type: ArPlaneType.horizontalUpwardFacing,
+      boundaryPolygon: [
+        doorwayNode.position.translate(dx: -1.25, dy: -1.25),
+        doorwayNode.position.translate(dx: 1.25, dy: -1.25),
+        doorwayNode.position.translate(dx: 1.25, dy: 1.25),
+        doorwayNode.position.translate(dx: -1.25, dy: 1.25),
+      ],
+    ));
+
     // Listen to live movement
     _posSub = _trackLivePositionUseCase.execute().listen((estimate) {
       _stepCount++;
@@ -139,6 +154,22 @@ class CanvassingViewModel extends ChangeNotifier {
           distanceMeters: _lastWalkNode!.position.distanceTo(_currentPosition),
           transitionType: VerticalTransition.walk,
         ));
+
+        // Emit structural corridor plane
+        _arCoreService.emitPlane(ArPlaneData(
+          id: 'plane_corridor_${_surveyedNodes.length}',
+          center: _currentPosition,
+          extentX: 2.4,
+          extentZ: 3.0,
+          type: ArPlaneType.horizontalUpwardFacing,
+          boundaryPolygon: [
+            _lastWalkNode!.position.translate(dx: -1.2),
+            _lastWalkNode!.position.translate(dx: 1.2),
+            _currentPosition.translate(dx: 1.2),
+            _currentPosition.translate(dx: -1.2),
+          ],
+        ));
+
         _lastWalkNode = newNode;
         notifyListeners();
       }
@@ -192,6 +223,21 @@ class CanvassingViewModel extends ChangeNotifier {
 
     _surveyedNodes[id] = node;
     _ensureFloorExists(_activeFloor);
+
+    // Emit structural POI / Room plane
+    _arCoreService.emitPlane(ArPlaneData(
+      id: 'plane_poi_${_surveyedNodes.length}',
+      center: node.position,
+      extentX: 3.5,
+      extentZ: 3.5,
+      type: ArPlaneType.horizontalUpwardFacing,
+      boundaryPolygon: [
+        node.position.translate(dx: -1.75, dy: -1.75),
+        node.position.translate(dx: 1.75, dy: -1.75),
+        node.position.translate(dx: 1.75, dy: 1.75),
+        node.position.translate(dx: -1.75, dy: 1.75),
+      ],
+    ));
 
     if (_lastWalkNode != null) {
       _surveyedEdges.add(NavEdge(

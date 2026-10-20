@@ -199,7 +199,7 @@ class _ArViewfinderWidgetState extends State<ArViewfinderWidget> with WidgetsBin
                         const Icon(Icons.layers, color: AppColors.cyanAccent, size: 16),
                         const SizedBox(width: 6),
                         Text(
-                          'Floor ${widget.activeFloor}',
+                          'Floor ${widget.activeFloor} • ${widget.stepCount} Steps',
                           style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
