@@ -128,6 +128,9 @@ class CanvassingViewModel extends ChangeNotifier {
     // Listen to live movement
     _posSub = _trackLivePositionUseCase.execute().listen((estimate) {
       _stepCount++;
+      _currentHeadingDegrees =
+          (estimate.orientation.azimuthRadians * 180.0 / math.pi % 360.0 + 360.0) % 360.0;
+
       // In survey mode, horizontal tracking comes from PDR, while activeFloor stays pinned to user selection
       _currentPosition = Coordinates3D(
         x: estimate.position.x,
@@ -135,9 +138,12 @@ class CanvassingViewModel extends ChangeNotifier {
         z: _activeFloor * 3.6,
       );
 
-      // Automatically place corridor waypoints every 3 meters
-      if (_lastWalkNode != null &&
-          _lastWalkNode!.position.distanceTo(_currentPosition) >= 3.0) {
+      final distSinceLast = _lastWalkNode != null
+          ? _lastWalkNode!.position.distanceTo(_currentPosition)
+          : 0.0;
+
+      // Automatically place corridor waypoints and structural planes every 1.5m or 3 steps
+      if (_lastWalkNode != null && (distSinceLast >= 1.5 || (_stepCount % 3 == 0 && distSinceLast >= 0.8))) {
         final corridorId = 'corridor_${_surveyedNodes.length}';
         final newNode = NavNode(
           id: corridorId,
@@ -151,16 +157,16 @@ class CanvassingViewModel extends ChangeNotifier {
         _surveyedEdges.add(NavEdge(
           sourceNodeId: _lastWalkNode!.id,
           targetNodeId: newNode.id,
-          distanceMeters: _lastWalkNode!.position.distanceTo(_currentPosition),
+          distanceMeters: distSinceLast,
           transitionType: VerticalTransition.walk,
         ));
 
-        // Emit structural corridor plane
+        // 1. Emit structural corridor floor plane
         _arCoreService.emitPlane(ArPlaneData(
           id: 'plane_corridor_${_surveyedNodes.length}',
           center: _currentPosition,
           extentX: 2.4,
-          extentZ: 3.0,
+          extentZ: distSinceLast.clamp(1.0, 4.0),
           type: ArPlaneType.horizontalUpwardFacing,
           boundaryPolygon: [
             _lastWalkNode!.position.translate(dx: -1.2),
@@ -170,9 +176,38 @@ class CanvassingViewModel extends ChangeNotifier {
           ],
         ));
 
+        // 2. Emit structural left and right wall planes
+        _arCoreService.emitPlane(ArPlaneData(
+          id: 'plane_wall_l_${_surveyedNodes.length}',
+          center: _currentPosition.translate(dx: -1.2, dz: 1.5),
+          extentX: distSinceLast.clamp(1.0, 4.0),
+          extentZ: 3.0,
+          type: ArPlaneType.vertical,
+          boundaryPolygon: [
+            _lastWalkNode!.position.translate(dx: -1.2),
+            _currentPosition.translate(dx: -1.2),
+            _currentPosition.translate(dx: -1.2, dz: 3.0),
+            _lastWalkNode!.position.translate(dx: -1.2, dz: 3.0),
+          ],
+        ));
+
+        _arCoreService.emitPlane(ArPlaneData(
+          id: 'plane_wall_r_${_surveyedNodes.length}',
+          center: _currentPosition.translate(dx: 1.2, dz: 1.5),
+          extentX: distSinceLast.clamp(1.0, 4.0),
+          extentZ: 3.0,
+          type: ArPlaneType.vertical,
+          boundaryPolygon: [
+            _lastWalkNode!.position.translate(dx: 1.2),
+            _currentPosition.translate(dx: 1.2),
+            _currentPosition.translate(dx: 1.2, dz: 3.0),
+            _lastWalkNode!.position.translate(dx: 1.2, dz: 3.0),
+          ],
+        ));
+
         _lastWalkNode = newNode;
-        notifyListeners();
       }
+      notifyListeners();
     });
 
     // Listen to ARCore Plane Detection
@@ -224,7 +259,7 @@ class CanvassingViewModel extends ChangeNotifier {
     _surveyedNodes[id] = node;
     _ensureFloorExists(_activeFloor);
 
-    // Emit structural POI / Room plane
+    // Emit structural POI / Room floor plane
     _arCoreService.emitPlane(ArPlaneData(
       id: 'plane_poi_${_surveyedNodes.length}',
       center: node.position,
@@ -236,6 +271,34 @@ class CanvassingViewModel extends ChangeNotifier {
         node.position.translate(dx: 1.75, dy: -1.75),
         node.position.translate(dx: 1.75, dy: 1.75),
         node.position.translate(dx: -1.75, dy: 1.75),
+      ],
+    ));
+
+    // Emit structural room wall planes
+    _arCoreService.emitPlane(ArPlaneData(
+      id: 'plane_poi_wall_n_${_surveyedNodes.length}',
+      center: node.position.translate(dy: 1.75, dz: 1.5),
+      extentX: 3.5,
+      extentZ: 3.0,
+      type: ArPlaneType.vertical,
+      boundaryPolygon: [
+        node.position.translate(dx: -1.75, dy: 1.75),
+        node.position.translate(dx: 1.75, dy: 1.75),
+        node.position.translate(dx: 1.75, dy: 1.75, dz: 3.0),
+        node.position.translate(dx: -1.75, dy: 1.75, dz: 3.0),
+      ],
+    ));
+    _arCoreService.emitPlane(ArPlaneData(
+      id: 'plane_poi_wall_s_${_surveyedNodes.length}',
+      center: node.position.translate(dy: -1.75, dz: 1.5),
+      extentX: 3.5,
+      extentZ: 3.0,
+      type: ArPlaneType.vertical,
+      boundaryPolygon: [
+        node.position.translate(dx: -1.75, dy: -1.75),
+        node.position.translate(dx: 1.75, dy: -1.75),
+        node.position.translate(dx: 1.75, dy: -1.75, dz: 3.0),
+        node.position.translate(dx: -1.75, dy: -1.75, dz: 3.0),
       ],
     ));
 

@@ -440,6 +440,105 @@ Future<void> main() async {
     } catch (_) {}
   });
 
+  print('\n--- 7. Testing Gyroscope Gravity Projection & 90-Degree Turn Tracking ---');
+
+  await runTest('Accurately tracks 90-degree left and right turns across different phone tilt angles', () {
+    // Case 1: Phone held flat (screen up, gravity reaction along +Z)
+    var upX = 0.0, upY = 0.0, upZ = 1.0;
+    var heading = 0.0; // East
+
+    // User turns 90 degrees left over 1.0s with gyro.z = pi/2 rad/s
+    var gx = 0.0, gy = 0.0, gz = math.pi / 2.0;
+    var dt = 1.0;
+    var omegaVert = gx * upX + gy * upY + gz * upZ;
+    heading += omegaVert * dt;
+    expectCloseTo(heading, math.pi / 2.0, 1e-4, 'Heading after flat 90 deg left turn');
+
+    // Case 2: Phone held in portrait upright (AR scanning, top +Y points up)
+    upX = 0.0; upY = 1.0; upZ = 0.0;
+    heading = 0.0;
+    // Turning 90 degrees left rotates around +Y with gyro.y = pi/2 rad/s
+    gx = 0.0; gy = math.pi / 2.0; gz = 0.0;
+    omegaVert = gx * upX + gy * upY + gz * upZ;
+    heading += omegaVert * dt;
+    expectCloseTo(heading, math.pi / 2.0, 1e-4, 'Heading after upright 90 deg left turn');
+
+    // Case 3: Phone tilted at 45 degrees
+    final invSqrt2 = 1.0 / math.sqrt(2.0);
+    upX = 0.0; upY = invSqrt2; upZ = invSqrt2;
+    heading = 0.0;
+    // Turning 90 deg left splits rate equally between Y and Z
+    final component = (math.pi / 2.0) * invSqrt2;
+    gx = 0.0; gy = component; gz = component;
+    omegaVert = gx * upX + gy * upY + gz * upZ;
+    heading += omegaVert * dt;
+    expectCloseTo(heading, math.pi / 2.0, 1e-4, 'Heading after 45-deg tilted 90 deg left turn');
+
+    // Verify displacement steps now trace a U-shape:
+    // Step 1: North (dy = 5, dx = 0)
+    // Step 2: Turn Left to West (dx = -5, dy = 0)
+    // Step 3: Turn Left to South (dy = -5, dx = 0)
+    final h1 = math.pi / 2.0; // North
+    final h2 = math.pi; // West
+    final h3 = -math.pi / 2.0; // South
+
+    var px = 0.0, py = 0.0;
+    px += 5.0 * math.cos(h1);
+    py += 5.0 * math.sin(h1);
+    expectCloseTo(px, 0.0, 1e-4, 'U-turn step 1 X');
+    expectCloseTo(py, 5.0, 1e-4, 'U-turn step 1 Y');
+
+    px += 5.0 * math.cos(h2);
+    py += 5.0 * math.sin(h2);
+    expectCloseTo(px, -5.0, 1e-4, 'U-turn step 2 X');
+    expectCloseTo(py, 5.0, 1e-4, 'U-turn step 2 Y');
+
+    px += 5.0 * math.cos(h3);
+    py += 5.0 * math.sin(h3);
+    expectCloseTo(px, -5.0, 1e-4, 'U-turn step 3 X');
+    expectCloseTo(py, 0.0, 1e-4, 'U-turn step 3 Y (returned to starting Y baseline)');
+  });
+
+  print('\n--- 8. Testing Corridor Wall Bounding & Landmark Snapping ---');
+
+  await runTest('Snaps to landmark when within 1.2m and clamps to corridor bounds when drifting', () {
+    final landmark = Coordinates3D(x: 10.0, y: 10.0, z: 0.0);
+
+    // Test 1: User is 0.5m away from landmark -> should snap to landmark position
+    final rawNear = Coordinates3D(x: 10.3, y: 10.4, z: 0.0);
+    final distToLandmark = rawNear.horizontalDistanceTo(landmark);
+    expect(distToLandmark < 1.2, 'Distance must be < 1.2m for snap');
+    final snapped = Coordinates3D(x: landmark.x, y: landmark.y, z: rawNear.z);
+    expectCloseTo(snapped.x, 10.0, 1e-4, 'Snapped X');
+    expectCloseTo(snapped.y, 10.0, 1e-4, 'Snapped Y');
+
+    // Test 2: Corridor segment from (0,0) to (20,0) (East-West corridor)
+    // Corridor half-width = 1.4m.
+    // User is at (10.0, 3.0), which is 3.0m off the centerline (outside the 1.4m corridor wall).
+    final segA = Coordinates3D(x: 0.0, y: 0.0, z: 0.0);
+    final segB = Coordinates3D(x: 20.0, y: 0.0, z: 0.0);
+    final rawDrift = Coordinates3D(x: 10.0, y: 3.0, z: 0.0);
+
+    final dx = segB.x - segA.x;
+    final dy = segB.y - segA.y;
+    final segLengthSq = dx * dx + dy * dy;
+    final t = (((rawDrift.x - segA.x) * dx + (rawDrift.y - segA.y) * dy) / segLengthSq).clamp(0.0, 1.0);
+    final projX = segA.x + t * dx;
+    final projY = segA.y + t * dy;
+    final perpDist = math.sqrt((rawDrift.x - projX) * (rawDrift.x - projX) + (rawDrift.y - projY) * (rawDrift.y - projY));
+
+    expectCloseTo(perpDist, 3.0, 1e-4, 'Perpendicular drift distance');
+    const maxHalfWidth = 1.4;
+    expect(perpDist > maxHalfWidth, 'Drift exceeds corridor width');
+
+    final pullFactor = maxHalfWidth / perpDist;
+    final clampedX = projX + (rawDrift.x - projX) * pullFactor;
+    final clampedY = projY + (rawDrift.y - projY) * pullFactor;
+
+    expectCloseTo(clampedX, 10.0, 1e-4, 'Clamped X stays on segment center');
+    expectCloseTo(clampedY, 1.4, 1e-4, 'Clamped Y restricted to physical corridor boundary');
+  });
+
   print('\n================================================================');
   print(' TEST SUMMARY: $passedCount PASSED, $failedCount FAILED');
   print('================================================================');

@@ -29,21 +29,30 @@ class PdrStepEvent {
   }
 }
 
-/// Detects pedestrian steps and estimates stride lengths and headings using raw IMU streams.
+/// Detects pedestrian steps and estimates stride lengths and headings using raw IMU streams
+/// fused with 3-axis gyroscope angular integration and barometric/magnetometer anchoring.
 class InertiaPdrService {
   /// Creates a PDR inertia service.
   InertiaPdrService({
     Stream<UserAccelerometerEvent>? accelerometerStream,
+    Stream<AccelerometerEvent>? rawAccelerometerStream,
     Stream<MagnetometerEvent>? magnetometerStream,
+    Stream<GyroscopeEvent>? gyroscopeStream,
   })  : _accelerometerStream = accelerometerStream ?? userAccelerometerEventStream(),
-        _magnetometerStream = magnetometerStream ?? magnetometerEventStream();
+        _rawAccelerometerStream = rawAccelerometerStream ?? accelerometerEventStream(),
+        _magnetometerStream = magnetometerStream ?? magnetometerEventStream(),
+        _gyroscopeStream = gyroscopeStream ?? gyroscopeEventStream();
 
   final Stream<UserAccelerometerEvent> _accelerometerStream;
+  final Stream<AccelerometerEvent> _rawAccelerometerStream;
   final Stream<MagnetometerEvent> _magnetometerStream;
+  final Stream<GyroscopeEvent> _gyroscopeStream;
 
   final _stepController = StreamController<PdrStepEvent>.broadcast();
-  StreamSubscription<UserAccelerometerEvent>? _accelSub;
+  StreamSubscription<UserAccelerometerEvent>? _userAccelSub;
+  StreamSubscription<AccelerometerEvent>? _rawAccelSub;
   StreamSubscription<MagnetometerEvent>? _magSub;
+  StreamSubscription<GyroscopeEvent>? _gyroSub;
 
   double _currentHeadingRadians = 0.0;
   double _lastMagnitude = 0.0;
@@ -52,7 +61,15 @@ class InertiaPdrService {
   double _valleyAccel = 0.0;
   int _lastStepTimestampMs = 0;
 
-  // Weinberg model constant (typically calibrated between 0.38 and 0.45)
+  // Normalized upward gravity vector in phone frame (default ~45 deg viewing angle)
+  double _upX = 0.0;
+  double _upY = 0.7071;
+  double _upZ = 0.7071;
+  int _lastGyroTimestampMs = 0;
+  double _lastOmegaVertical = 0.0;
+  bool _hasMagAnchor = false;
+
+  // Weinberg model constant (calibrated for human indoor gait)
   static const double _weinbergK = 0.42;
   static const double _stepThreshold = 1.2; // m/s^2 above resting gravity
   static const int _minStepIntervalMs = 260; // Minimum duration between human steps
@@ -65,12 +82,53 @@ class InertiaPdrService {
 
   /// Starts listening to sensor feeds and analyzing gait kinematics.
   void start() {
-    _magSub = _magnetometerStream.listen((mag) {
-      // Cartesian horizontal heading from magnetometer (East = 0, North = pi/2)
-      _currentHeadingRadians = math.atan2(mag.y, -mag.x);
+    // 1. Raw Accelerometer: Dynamically tracks gravity reaction vector to determine phone orientation
+    _rawAccelSub = _rawAccelerometerStream.listen((accel) {
+      final norm = math.sqrt(accel.x * accel.x + accel.y * accel.y + accel.z * accel.z);
+      if (norm > 2.0) {
+        _upX = accel.x / norm;
+        _upY = accel.y / norm;
+        _upZ = accel.z / norm;
+      }
     });
 
-    _accelSub = _accelerometerStream.listen((accel) {
+    // 2. High-Frequency Gyroscope Integration: Real-time turn tracking with zero magnetic distortion
+    _gyroSub = _gyroscopeStream.listen((gyro) {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (_lastGyroTimestampMs > 0) {
+        final dt = ((now - _lastGyroTimestampMs) / 1000.0).clamp(0.001, 0.1);
+        // Project angular velocity onto gravitational vertical axis
+        final omegaVertical = gyro.x * _upX + gyro.y * _upY + gyro.z * _upZ;
+        _lastOmegaVertical = omegaVertical;
+
+        _currentHeadingRadians += omegaVertical * dt;
+        // Normalize into [-pi, pi]
+        _currentHeadingRadians = (_currentHeadingRadians + math.pi) % (2 * math.pi) - math.pi;
+      }
+      _lastGyroTimestampMs = now;
+    });
+
+    // 3. Magnetometer: Absolute initial anchor + slow complementary filter during steady walking
+    _magSub = _magnetometerStream.listen((mag) {
+      // Cartesian horizontal heading from magnetometer (East = 0, North = pi/2)
+      final magHeading = math.atan2(mag.y, -mag.x);
+      if (!_hasMagAnchor) {
+        _currentHeadingRadians = magHeading;
+        _hasMagAnchor = true;
+      } else {
+        // Only blend slowly when user is NOT in the middle of a physical turn to prevent hard-iron pinning
+        if (_lastOmegaVertical.abs() < 0.08) {
+          var diff = magHeading - _currentHeadingRadians;
+          while (diff > math.pi) diff -= 2 * math.pi;
+          while (diff < -math.pi) diff += 2 * math.pi;
+          _currentHeadingRadians += diff * 0.005;
+          _currentHeadingRadians = (_currentHeadingRadians + math.pi) % (2 * math.pi) - math.pi;
+        }
+      }
+    });
+
+    // 4. User Accelerometer: Weinberg step detection & stride length estimation
+    _userAccelSub = _accelerometerStream.listen((accel) {
       final now = DateTime.now().millisecondsSinceEpoch;
       final magnitude = math.sqrt(
         accel.x * accel.x + accel.y * accel.y + accel.z * accel.z,
@@ -111,8 +169,10 @@ class InertiaPdrService {
 
   /// Stops sensor subscriptions and releases resources.
   void stop() {
-    _accelSub?.cancel();
+    _rawAccelSub?.cancel();
+    _gyroSub?.cancel();
     _magSub?.cancel();
+    _userAccelSub?.cancel();
   }
 
   /// Disposes internal stream controllers.

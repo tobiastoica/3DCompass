@@ -110,6 +110,7 @@ class NavigationViewModel extends ChangeNotifier {
 
   /// Starts listening to sensor fusion updates.
   void startNavigation() {
+    _posSub?.cancel();
     _posSub = _trackLivePositionUseCase.execute().listen((estimate) {
       var currentPos = estimate.position;
       final building = _navigationRepository.activeBuilding;
@@ -142,9 +143,7 @@ class NavigationViewModel extends ChangeNotifier {
       final dist = rawPos.horizontalDistanceTo(node.position);
       // If within 1.2m of a named landmark node, snap position and eliminate dead-reckoning drift
       if (dist < 1.2) {
-        final snapped = Coordinates3D(x: node.position.x, y: node.position.y, z: rawPos.z);
-        _sensorFusionRepository.resetPosition(snapped);
-        return snapped;
+        return Coordinates3D(x: node.position.x, y: node.position.y, z: rawPos.z);
       }
     }
 
@@ -193,9 +192,7 @@ class NavigationViewModel extends ChangeNotifier {
         final pullFactor = maxCorridorHalfWidth / minPerpDist;
         final clampedX = bestProjection.x + (rawPos.x - bestProjection.x) * pullFactor;
         final clampedY = bestProjection.y + (rawPos.y - bestProjection.y) * pullFactor;
-        final clampedPos = Coordinates3D(x: clampedX, y: clampedY, z: rawPos.z);
-        _sensorFusionRepository.resetPosition(clampedPos);
-        return clampedPos;
+        return Coordinates3D(x: clampedX, y: clampedY, z: rawPos.z);
       }
     }
 

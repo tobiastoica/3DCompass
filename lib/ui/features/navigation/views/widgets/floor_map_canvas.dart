@@ -32,29 +32,45 @@ class FloorMapCanvas extends StatefulWidget {
 }
 
 class _FloorMapCanvasState extends State<FloorMapCanvas> {
-  final TransformationController _transformationController = TransformationController();
+  Offset _panOffset = Offset.zero;
+  double _zoomScale = 1.0;
+  double _baseScale = 1.0;
 
   void _recenter() {
-    _transformationController.value = Matrix4.identity();
+    setState(() {
+      _panOffset = Offset.zero;
+      _zoomScale = 1.0;
+    });
   }
 
-  @override
-  void dispose() {
-    _transformationController.dispose();
-    super.dispose();
+  void _zoomIn() {
+    setState(() {
+      _zoomScale = (_zoomScale * 1.3).clamp(0.35, 6.0);
+    });
+  }
+
+  void _zoomOut() {
+    setState(() {
+      _zoomScale = (_zoomScale / 1.3).clamp(0.35, 6.0);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        // Pan & Zoom Interactive Canvas
-        InteractiveViewer(
-          transformationController: _transformationController,
-          minScale: 0.35,
-          maxScale: 6.0,
-          boundaryMargin: const EdgeInsets.all(1500.0),
-          constrained: true,
+        // Pan & Pinch-Zoom Vector Map Canvas
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onScaleStart: (details) {
+            _baseScale = _zoomScale;
+          },
+          onScaleUpdate: (details) {
+            setState(() {
+              _zoomScale = (_baseScale * details.scale).clamp(0.35, 6.0);
+              _panOffset += details.focalPointDelta;
+            });
+          },
           child: SizedBox.expand(
             child: Container(
               color: const Color(0xFF0A0F1D),
@@ -64,45 +80,86 @@ class _FloorMapCanvasState extends State<FloorMapCanvas> {
                   floorIndex: widget.activeFloorIndex,
                   userPos: widget.userPosition,
                   path: widget.activePath,
+                  panOffset: _panOffset,
+                  zoomScale: _zoomScale,
                 ),
               ),
             ),
           ),
         ),
 
-        // Recenter Floating Button
+        // Zoom & Recenter Control Buttons Floating Bar
         Positioned(
           right: 16,
-          bottom: 235,
-          child: Material(
-            elevation: 8,
-            shape: const CircleBorder(),
-            color: AppColors.surfaceDark.withOpacity(0.92),
-            child: InkWell(
-              customBorder: const CircleBorder(),
-              onTap: _recenter,
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: AppColors.cyanAccent.withOpacity(0.6),
-                    width: 1.5,
-                  ),
-                  boxShadow: const [
-                    BoxShadow(color: Colors.black45, blurRadius: 8, offset: Offset(0, 2)),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.my_location,
-                  color: AppColors.cyanAccent,
-                  size: 22,
-                ),
+          bottom: 220,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Zoom In (+) Button
+              _buildFloatingBtn(
+                icon: Icons.add,
+                tooltip: 'Zoom In',
+                onTap: _zoomIn,
               ),
-            ),
+              const SizedBox(height: 8),
+
+              // Zoom Out (-) Button
+              _buildFloatingBtn(
+                icon: Icons.remove,
+                tooltip: 'Zoom Out',
+                onTap: _zoomOut,
+              ),
+              const SizedBox(height: 8),
+
+              // Recenter Button
+              _buildFloatingBtn(
+                icon: Icons.my_location,
+                tooltip: 'Recenter on User',
+                onTap: _recenter,
+                iconColor: AppColors.cyanAccent,
+              ),
+            ],
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildFloatingBtn({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onTap,
+    Color iconColor = Colors.white,
+  }) {
+    return Material(
+      elevation: 6,
+      shape: const CircleBorder(),
+      color: AppColors.surfaceDark.withOpacity(0.92),
+      child: Tooltip(
+        message: tooltip,
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: AppColors.cyanAccent.withOpacity(0.4),
+                width: 1.2,
+              ),
+              boxShadow: const [
+                BoxShadow(color: Colors.black45, blurRadius: 6, offset: Offset(0, 2)),
+              ],
+            ),
+            child: Icon(
+              icon,
+              color: iconColor,
+              size: 20,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -113,28 +170,36 @@ class _FloorPlanPainter extends CustomPainter {
     required this.floorIndex,
     required this.userPos,
     required this.path,
+    required this.panOffset,
+    required this.zoomScale,
   });
 
   final Building3DModel? building;
   final int floorIndex;
   final Coordinates3D userPos;
   final NavigationPath? path;
+  final Offset panOffset;
+  final double zoomScale;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    const scale = 14.0; // 14 pixels per meter
+    final center = Offset(size.width / 2, size.height / 2) + panOffset;
+    final scale = 14.0 * zoomScale; // Scaled pixels per meter
 
     // Grid lines for scale reference
     final gridPaint = Paint()
       ..color = Colors.white.withOpacity(0.06)
       ..strokeWidth = 1.0;
-    const gridSpacing = 5.0 * scale; // 5 meters grid
-    for (var x = 0.0; x < size.width; x += gridSpacing) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
-    }
-    for (var y = 0.0; y < size.height; y += gridSpacing) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+    final gridSpacing = 5.0 * scale; // 5 meters grid
+    if (gridSpacing > 10.0) {
+      final startX = (center.dx % gridSpacing) - gridSpacing;
+      for (var x = startX; x < size.width + gridSpacing; x += gridSpacing) {
+        canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
+      }
+      final startY = (center.dy % gridSpacing) - gridSpacing;
+      for (var y = startY; y < size.height + gridSpacing; y += gridSpacing) {
+        canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+      }
     }
 
     if (building == null) return;
@@ -142,12 +207,12 @@ class _FloorPlanPainter extends CustomPainter {
     // Draw Floor Corridors / Edges
     final edgePaint = Paint()
       ..color = const Color(0xFF334155) // Slate 700 corridor paths
-      ..strokeWidth = 8.0
+      ..strokeWidth = 8.0 * zoomScale.clamp(0.6, 1.8)
       ..strokeCap = StrokeCap.round;
 
     final edgeGlowPaint = Paint()
       ..color = Colors.white.withOpacity(0.12)
-      ..strokeWidth = 2.0
+      ..strokeWidth = 2.0 * zoomScale.clamp(0.6, 1.8)
       ..strokeCap = StrokeCap.round;
 
     for (final edge in building!.navGraph.allEdges) {
@@ -167,14 +232,14 @@ class _FloorPlanPainter extends CustomPainter {
       if (pathPoints.length >= 2) {
         final pathGlowPaint = Paint()
           ..color = AppColors.cyanAccent.withOpacity(0.35)
-          ..strokeWidth = 10.0
+          ..strokeWidth = 10.0 * zoomScale.clamp(0.6, 1.8)
           ..strokeJoin = StrokeJoin.round
           ..strokeCap = StrokeCap.round
           ..style = PaintingStyle.stroke;
 
         final pathPaint = Paint()
           ..color = AppColors.cyanAccent
-          ..strokeWidth = 4.0
+          ..strokeWidth = 4.0 * zoomScale.clamp(0.6, 1.8)
           ..strokeJoin = StrokeJoin.round
           ..strokeCap = StrokeCap.round
           ..style = PaintingStyle.stroke;
@@ -196,40 +261,35 @@ class _FloorPlanPainter extends CustomPainter {
       final pos = center + Offset(node.position.x * scale, -node.position.y * scale);
 
       Color nodeColor;
-      IconData icon;
       if (node.type.name == 'room') {
         nodeColor = AppColors.cobaltBlue;
-        icon = Icons.meeting_room;
       } else if (node.type.name == 'stairs') {
         nodeColor = AppColors.amberWarning;
-        icon = Icons.stairs;
       } else if (node.type.name == 'doorway') {
         nodeColor = AppColors.emeraldGreen;
-        icon = Icons.door_front_door;
       } else {
         nodeColor = Colors.white54;
-        icon = Icons.circle;
       }
 
       // Draw node circle
       final nodePaint = Paint()
         ..color = nodeColor
         ..style = PaintingStyle.fill;
-      canvas.drawCircle(pos, 7.0, nodePaint);
+      canvas.drawCircle(pos, 7.0 * zoomScale.clamp(0.6, 1.5), nodePaint);
 
       final nodeRingPaint = Paint()
         ..color = Colors.white.withOpacity(0.8)
         ..strokeWidth = 1.5
         ..style = PaintingStyle.stroke;
-      canvas.drawCircle(pos, 7.0, nodeRingPaint);
+      canvas.drawCircle(pos, 7.0 * zoomScale.clamp(0.6, 1.5), nodeRingPaint);
 
       // Render Node Label with Dark Pill Background for maximum legibility
       if (node.name.isNotEmpty && node.type.name != 'hallway') {
         final textSpan = TextSpan(
           text: node.name,
-          style: const TextStyle(
+          style: TextStyle(
             color: Colors.white,
-            fontSize: 11,
+            fontSize: (11 * zoomScale.clamp(0.8, 1.3)).clamp(9.0, 15.0),
             fontWeight: FontWeight.bold,
           ),
         );
@@ -238,7 +298,7 @@ class _FloorPlanPainter extends CustomPainter {
           textDirection: TextDirection.ltr,
         )..layout();
 
-        final labelOffset = pos + Offset(-textPainter.width / 2, 11);
+        final labelOffset = pos + Offset(-textPainter.width / 2, 11 * zoomScale.clamp(0.8, 1.4));
         final bgRect = RRect.fromRectAndRadius(
           Rect.fromLTWH(
             labelOffset.dx - 6,
@@ -268,18 +328,18 @@ class _FloorPlanPainter extends CustomPainter {
     final userHaloPaint = Paint()
       ..color = AppColors.cyanAccent.withOpacity(0.25)
       ..style = PaintingStyle.fill;
-    canvas.drawCircle(userScreenPos, 18.0, userHaloPaint);
+    canvas.drawCircle(userScreenPos, 18.0 * zoomScale.clamp(0.7, 1.5), userHaloPaint);
 
     final userPinPaint = Paint()
       ..color = AppColors.cyanAccent
       ..style = PaintingStyle.fill;
-    canvas.drawCircle(userScreenPos, 7.5, userPinPaint);
+    canvas.drawCircle(userScreenPos, 7.5 * zoomScale.clamp(0.7, 1.5), userPinPaint);
 
     final userPinBorderPaint = Paint()
       ..color = Colors.white
       ..strokeWidth = 2.0
       ..style = PaintingStyle.stroke;
-    canvas.drawCircle(userScreenPos, 7.5, userPinBorderPaint);
+    canvas.drawCircle(userScreenPos, 7.5 * zoomScale.clamp(0.7, 1.5), userPinBorderPaint);
 
     // "YOU" Label over user position
     final youSpan = const TextSpan(
@@ -297,7 +357,7 @@ class _FloorPlanPainter extends CustomPainter {
     )..layout();
     youPainter.paint(
       canvas,
-      userScreenPos + Offset(-youPainter.width / 2, -22),
+      userScreenPos + Offset(-youPainter.width / 2, -22 * zoomScale.clamp(0.7, 1.5)),
     );
   }
 
@@ -305,6 +365,8 @@ class _FloorPlanPainter extends CustomPainter {
   bool shouldRepaint(covariant _FloorPlanPainter oldDelegate) {
     return oldDelegate.floorIndex != floorIndex ||
         oldDelegate.userPos != userPos ||
-        oldDelegate.path != path;
+        oldDelegate.path != path ||
+        oldDelegate.panOffset != panOffset ||
+        oldDelegate.zoomScale != zoomScale;
   }
 }
