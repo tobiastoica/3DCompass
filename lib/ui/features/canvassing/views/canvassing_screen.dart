@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:compass_3d/domain/models/nav_edge.dart';
 import 'package:compass_3d/ui/core/theme/app_colors.dart';
 import '../view_models/canvassing_view_model.dart';
 import 'widgets/ar_viewfinder_widget.dart';
