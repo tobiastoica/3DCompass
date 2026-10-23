@@ -60,7 +60,55 @@ class _CanvassingScreenState extends State<CanvassingScreen> {
                 stepCount: widget.viewModel.stepCount,
               ),
 
-              // 2. Bottom Canvass Action Sheet with Floor Switcher
+              // 2. Active Stair / Elevator Traversing Banner
+              if (widget.viewModel.isTraversingStairs)
+                Positioned(
+                  bottom: 210,
+                  left: 16,
+                  right: 16,
+                  child: Material(
+                    elevation: 10,
+                    borderRadius: BorderRadius.circular(16),
+                    color: const Color(0xFFB45309), // Amber 700
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.stairs, color: Colors.white, size: 28),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '${widget.viewModel.activeTransitionType == VerticalTransition.stairs ? "Climbing Stairs" : "In Elevator"} to Floor ${widget.viewModel.stairTargetFloor}',
+                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                                ),
+                                const Text(
+                                  'Walk stairs. Tap "Arrived" at landing.',
+                                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: Colors.black,
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            onPressed: () => widget.viewModel.completeVerticalTransition(),
+                            child: const Text('Arrived', style: TextStyle(fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+              // 3. Bottom Canvass Action Sheet with Floor Switcher
               Positioned(
                 bottom: 0,
                 left: 0,

@@ -204,15 +204,21 @@ class _FloorPlanPainter extends CustomPainter {
 
     if (building == null) return;
 
-    // Draw Floor Corridors / Edges
-    final edgePaint = Paint()
-      ..color = const Color(0xFF334155) // Slate 700 corridor paths
-      ..strokeWidth = 8.0 * zoomScale.clamp(0.6, 1.8)
+    // 1. Draw Architectural Corridors (Wide physical floor surface + dual parallel walls)
+    final corridorWidth = 2.4 * scale; // 2.4m standard corridor width
+    final corridorFloorPaint = Paint()
+      ..color = const Color(0xFF1E293B) // Dark slate architectural interior fill
+      ..strokeWidth = corridorWidth
       ..strokeCap = StrokeCap.round;
 
-    final edgeGlowPaint = Paint()
-      ..color = Colors.white.withOpacity(0.12)
-      ..strokeWidth = 2.0 * zoomScale.clamp(0.6, 1.8)
+    final corridorWallPaint = Paint()
+      ..color = const Color(0xFF64748B) // Slate 500 physical corridor walls
+      ..strokeWidth = 2.2 * zoomScale.clamp(0.7, 1.4)
+      ..strokeCap = StrokeCap.round;
+
+    final corridorCenterlinePaint = Paint()
+      ..color = const Color(0x3038BDF8) // Soft cyan guidance line
+      ..strokeWidth = 1.0 * zoomScale.clamp(0.6, 1.2)
       ..strokeCap = StrokeCap.round;
 
     for (final edge in building!.navGraph.allEdges) {
@@ -221,12 +227,34 @@ class _FloorPlanPainter extends CustomPainter {
       if (s != null && t != null && s.floorIndex == floorIndex && t.floorIndex == floorIndex) {
         final p1 = center + Offset(s.position.x * scale, -s.position.y * scale);
         final p2 = center + Offset(t.position.x * scale, -t.position.y * scale);
-        canvas.drawLine(p1, p2, edgePaint);
-        canvas.drawLine(p1, p2, edgeGlowPaint);
+
+        // Draw corridor floor surface
+        canvas.drawLine(p1, p2, corridorFloorPaint);
+
+        // Draw dual corridor walls
+        final dx = p2.dx - p1.dx;
+        final dy = p2.dy - p1.dy;
+        final len = math.sqrt(dx * dx + dy * dy);
+        if (len > 1.0) {
+          final halfW = corridorWidth / 2.0;
+          final nx = (-dy / len) * halfW;
+          final ny = (dx / len) * halfW;
+
+          final left1 = Offset(p1.dx + nx, p1.dy + ny);
+          final left2 = Offset(p2.dx + nx, p2.dy + ny);
+          final right1 = Offset(p1.dx - nx, p1.dy - ny);
+          final right2 = Offset(p2.dx - nx, p2.dy - ny);
+
+          canvas.drawLine(left1, left2, corridorWallPaint);
+          canvas.drawLine(right1, right2, corridorWallPaint);
+        }
+
+        // Draw subtle centerline guide
+        canvas.drawLine(p1, p2, corridorCenterlinePaint);
       }
     }
 
-    // Draw Active Navigation Path
+    // 2. Draw Active Navigation Path
     if (path != null && path!.isNotEmpty) {
       final pathPoints = path!.waypoints.where((w) => w.floorIndex == floorIndex).toList();
       if (pathPoints.length >= 2) {
@@ -256,34 +284,77 @@ class _FloorPlanPainter extends CustomPainter {
       }
     }
 
-    // Draw Floor Nodes with Readable Labels
+    // 3. Draw Floor Architectural Spaces (Rooms, Stairwells, Doorways) - Hallway dots suppressed
     for (final node in building!.navGraph.getNodesForFloor(floorIndex)) {
       final pos = center + Offset(node.position.x * scale, -node.position.y * scale);
 
-      Color nodeColor;
-      if (node.type.name == 'room') {
-        nodeColor = AppColors.cobaltBlue;
-      } else if (node.type.name == 'stairs') {
-        nodeColor = AppColors.amberWarning;
-      } else if (node.type.name == 'doorway') {
-        nodeColor = AppColors.emeraldGreen;
-      } else {
-        nodeColor = Colors.white54;
+      // A. ROOM / AMENITY: Architectural rectangular room footprint with walls
+      if (node.type == NodeType.room || node.type == NodeType.amenity) {
+        final roomSize = 4.2 * scale;
+        final roomRect = Rect.fromCenter(center: pos, width: roomSize, height: roomSize);
+        final roomRRect = RRect.fromRectAndRadius(roomRect, const Radius.circular(6));
+
+        final roomFillPaint = Paint()
+          ..color = const Color(0x350369A1) // Semi-transparent ocean blue room footprint
+          ..style = PaintingStyle.fill;
+        canvas.drawRRect(roomRRect, roomFillPaint);
+
+        final roomWallPaint = Paint()
+          ..color = AppColors.cyanAccent.withOpacity(0.8)
+          ..strokeWidth = 2.0
+          ..style = PaintingStyle.stroke;
+        canvas.drawRRect(roomRRect, roomWallPaint);
+
+        final pinPaint = Paint()..color = AppColors.cobaltBlue;
+        canvas.drawCircle(pos, 6.0 * zoomScale.clamp(0.7, 1.4), pinPaint);
       }
+      // B. STAIRS / ELEVATOR: Architectural stairwell with treads
+      else if (node.type == NodeType.stairs || node.type == NodeType.elevator) {
+        final stairSize = 3.6 * scale;
+        final stairRect = Rect.fromCenter(center: pos, width: stairSize, height: stairSize);
+        final stairRRect = RRect.fromRectAndRadius(stairRect, const Radius.circular(6));
 
-      // Draw node circle
-      final nodePaint = Paint()
-        ..color = nodeColor
-        ..style = PaintingStyle.fill;
-      canvas.drawCircle(pos, 7.0 * zoomScale.clamp(0.6, 1.5), nodePaint);
+        final stairFillPaint = Paint()
+          ..color = const Color(0x40D97706) // Warm amber stairwell fill
+          ..style = PaintingStyle.fill;
+        canvas.drawRRect(stairRRect, stairFillPaint);
 
-      final nodeRingPaint = Paint()
-        ..color = Colors.white.withOpacity(0.8)
-        ..strokeWidth = 1.5
-        ..style = PaintingStyle.stroke;
-      canvas.drawCircle(pos, 7.0 * zoomScale.clamp(0.6, 1.5), nodeRingPaint);
+        final stairBorderPaint = Paint()
+          ..color = AppColors.amberWarning
+          ..strokeWidth = 2.0
+          ..style = PaintingStyle.stroke;
+        canvas.drawRRect(stairRRect, stairBorderPaint);
 
-      // Render Node Label with Dark Pill Background for maximum legibility
+        // Draw parallel stair treads across the box
+        final treadPaint = Paint()
+          ..color = AppColors.amberWarning.withOpacity(0.6)
+          ..strokeWidth = 1.5;
+        const treadCount = 4;
+        for (var i = 1; i <= treadCount; i++) {
+          final frac = i / (treadCount + 1);
+          final ty = stairRect.top + stairRect.height * frac;
+          canvas.drawLine(Offset(stairRect.left + 4, ty), Offset(stairRect.right - 4, ty), treadPaint);
+        }
+
+        final pinPaint = Paint()..color = AppColors.amberWarning;
+        canvas.drawCircle(pos, 6.5 * zoomScale.clamp(0.7, 1.4), pinPaint);
+      }
+      // C. ENTRANCE DOORWAY:
+      else if (node.type == NodeType.doorway) {
+        final doorPaint = Paint()
+          ..color = AppColors.emeraldGreen
+          ..style = PaintingStyle.fill;
+        canvas.drawCircle(pos, 8.0 * zoomScale.clamp(0.7, 1.4), doorPaint);
+
+        final doorRingPaint = Paint()
+          ..color = Colors.white
+          ..strokeWidth = 2.0
+          ..style = PaintingStyle.stroke;
+        canvas.drawCircle(pos, 8.0 * zoomScale.clamp(0.7, 1.4), doorRingPaint);
+      }
+      // D. HALLWAY WAYPOINTS: Invisible skeleton joints (NO circles drawn)
+
+      // Render Landmark Badges (Room names, Stairs, Doorways)
       if (node.name.isNotEmpty && node.type.name != 'hallway') {
         final textSpan = TextSpan(
           text: node.name,
@@ -298,7 +369,7 @@ class _FloorPlanPainter extends CustomPainter {
           textDirection: TextDirection.ltr,
         )..layout();
 
-        final labelOffset = pos + Offset(-textPainter.width / 2, 11 * zoomScale.clamp(0.8, 1.4));
+        final labelOffset = pos + Offset(-textPainter.width / 2, 12 * zoomScale.clamp(0.8, 1.4));
         final bgRect = RRect.fromRectAndRadius(
           Rect.fromLTWH(
             labelOffset.dx - 6,
@@ -309,9 +380,18 @@ class _FloorPlanPainter extends CustomPainter {
           const Radius.circular(6),
         );
 
-        final bgPaint = Paint()..color = const Color(0xDD0F172A);
+        Color badgeBorder;
+        if (node.type == NodeType.stairs || node.type == NodeType.elevator) {
+          badgeBorder = AppColors.amberWarning;
+        } else if (node.type == NodeType.doorway) {
+          badgeBorder = AppColors.emeraldGreen;
+        } else {
+          badgeBorder = AppColors.cyanAccent;
+        }
+
+        final bgPaint = Paint()..color = const Color(0xEE0F172A);
         final bgBorderPaint = Paint()
-          ..color = nodeColor.withOpacity(0.7)
+          ..color = badgeBorder.withOpacity(0.8)
           ..strokeWidth = 1.0
           ..style = PaintingStyle.stroke;
 

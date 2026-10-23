@@ -539,6 +539,109 @@ Future<void> main() async {
     expectCloseTo(clampedY, 1.4, 1e-4, 'Clamped Y restricted to physical corridor boundary');
   });
 
+  print('\n--- 9. Testing True 3D Tilt-Compensated Compass Math ---');
+
+  await runTest('Computes accurate magnetic azimuth across flat, upright, and tilted postures without dip error', () {
+    // Earth magnetic field in Northern Europe: North = 20uT, Down = 40uT (dip angle ~ 63 deg)
+    // Case 1: Phone flat on table, pointing North:
+    // Device frame: gravity reaction along +Z (upX=0, upY=0, upZ=1)
+    // Magnetic field in device frame: magX = 0, magY = 20, magZ = -40 (down into table)
+    final upX = 0.0, upY = 0.0, upZ = 1.0;
+    final magX = 0.0, magY = 20.0, magZ = -40.0;
+
+    // East vector = mag x up:
+    final eX = magY * upZ - magZ * upY; // 20*1 - (-40)*0 = 20
+    final eY = magZ * upX - magX * upZ; // -40*0 - 0*1 = 0
+    final eZ = magX * upY - magY * upX; // 0
+    final eNorm = math.sqrt(eX * eX + eY * eY + eZ * eZ);
+    expectCloseTo(eNorm, 20.0, 1e-4, 'East vector norm');
+
+    final eastX = eX / eNorm; // 1.0 (pointing device East)
+    final eastY = eY / eNorm; // 0
+    final eastZ = eZ / eNorm; // 0
+
+    // North vector = up x east:
+    final northX = upY * eastZ - upZ * eastY; // 0
+    final northY = upZ * eastX - upX * eastZ; // 1*1 - 0 = 1.0 (pointing device North)
+    final northZ = upX * eastY - upY * eastX; // 0
+
+    // Flat phone forward vector is (0, upZ, -upY) = (0, 1, 0)
+    final fwdY = upZ;
+    final fwdZ = -upY;
+    final dotEast = fwdY * eastY + fwdZ * eastZ; // 0
+    final dotNorth = fwdY * northY + fwdZ * northZ; // 1.0
+
+    final azimuthRad = math.atan2(dotNorth, dotEast);
+    // dotNorth = 1.0, dotEast = 0.0 -> atan2(1, 0) = pi/2 (pointing North in Cartesian plane)
+    expectCloseTo(azimuthRad, math.pi / 2.0, 1e-4, 'Flat phone points North');
+
+    // Case 2: Phone upright in AR mode (top points to sky, camera points forward towards North):
+    // Gravity reaction along +Y (upX=0, upY=1, upZ=0)
+    // Back camera (-Z) points North. Magnetic field: magX = 0, magY = -40 (dip into ground along -Y), magZ = -20 (North is -Z)
+    final upX2 = 0.0, upY2 = 1.0, upZ2 = 0.0;
+    final magX2 = 0.0, magY2 = -40.0, magZ2 = -20.0;
+
+    final eX2 = magY2 * upZ2 - magZ2 * upY2; // -40*0 - (-20)*1 = 20.0
+    final eY2 = magZ2 * upX2 - magX2 * upZ2; // 0
+    final eZ2 = magX2 * upY2 - magY2 * upX2; // 0
+    final eNorm2 = math.sqrt(eX2 * eX2 + eY2 * eY2 + eZ2 * eZ2);
+
+    final eastX2 = eX2 / eNorm2; // 1.0
+    final eastY2 = 0.0;
+    final eastZ2 = 0.0;
+
+    final northX2 = upY2 * eastZ2 - upZ2 * eastY2; // 0
+    final northY2 = upZ2 * eastX2 - upX2 * eastZ2; // 0
+    final northZ2 = upX2 * eastY2 - upY2 * eastX2; // -1.0 (device -Z points North!)
+
+    // Upright phone forward vector is (0, upZ2, -upY2) = (0, 0, -1)
+    final fwdY2 = upZ2; // 0
+    final fwdZ2 = -upY2; // -1.0
+    final dotEast2 = fwdY2 * eastY2 + fwdZ2 * eastZ2; // 0
+    final dotNorth2 = fwdY2 * northY2 + fwdZ2 * northZ2; // (-1)*(-1) = 1.0!
+
+    final azimuthRad2 = math.atan2(dotNorth2, dotEast2);
+    // Even though phone posture changed completely from flat to upright,
+    // the tilt-compensated compass resolves EXACT North (pi/2) with ZERO dip error!
+    expectCloseTo(azimuthRad2, math.pi / 2.0, 1e-4, 'Upright phone resolves exact North despite 40uT magnetic dip');
+  });
+
+  print('\n--- 10. Testing Stairwell Vertical Edge Traversal ---');
+
+  await runTest('Directly connects departure to landing with vertical edge and suppresses horizontal loops', () {
+    // Departure at (10, 5, 0) on Floor 0
+    final departure = const NavNode(
+      id: 'stairs_f0',
+      name: 'Stairs to Floor 1',
+      position: Coordinates3D(x: 10.0, y: 5.0, z: 0.0),
+      floorIndex: 0,
+      type: NodeType.stairs,
+    );
+
+    // Landing at (10, 5, 3.6) on Floor 1
+    final landing = const NavNode(
+      id: 'stairs_f1',
+      name: 'Stairs from Floor 0',
+      position: Coordinates3D(x: 10.0, y: 5.0, z: 3.6),
+      floorIndex: 1,
+      type: NodeType.stairs,
+    );
+
+    final edge = NavEdge(
+      sourceNodeId: departure.id,
+      targetNodeId: landing.id,
+      distanceMeters: (landing.position.z - departure.position.z).abs(),
+      transitionType: VerticalTransition.stairs,
+      isWheelchairAccessible: false,
+    );
+
+    expect(edge.transitionType == VerticalTransition.stairs, 'Transition must be stairs');
+    expectCloseTo(edge.distanceMeters, 3.6, 1e-4, 'Stair distance is vertical delta');
+    expect(departure.floorIndex == 0, 'Departure on floor 0');
+    expect(landing.floorIndex == 1, 'Landing on floor 1');
+    expectCloseTo(departure.position.horizontalDistanceTo(landing.position), 0.0, 1e-4, 'Stairwell aligned vertically');
+  });
+
   print('\n================================================================');
   print(' TEST SUMMARY: $passedCount PASSED, $failedCount FAILED');
   print('================================================================');

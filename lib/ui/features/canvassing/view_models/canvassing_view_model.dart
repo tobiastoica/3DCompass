@@ -7,6 +7,7 @@ import 'package:compass_3d/domain/models/floor_level.dart';
 import 'package:compass_3d/domain/models/nav_edge.dart';
 import 'package:compass_3d/domain/models/nav_node.dart';
 import 'package:compass_3d/domain/models/position_estimate.dart';
+import 'package:compass_3d/domain/repositories/sensor_fusion_repository.dart';
 import 'package:compass_3d/domain/use_cases/canvass_building_use_case.dart';
 import 'package:compass_3d/domain/use_cases/track_live_position_use_case.dart';
 
@@ -17,13 +18,16 @@ class CanvassingViewModel extends ChangeNotifier {
     required CanvassBuildingUseCase canvassBuildingUseCase,
     required TrackLivePositionUseCase trackLivePositionUseCase,
     required ArCoreCanvassService arCoreService,
+    SensorFusionRepository? sensorFusionRepository,
   })  : _canvassBuildingUseCase = canvassBuildingUseCase,
         _trackLivePositionUseCase = trackLivePositionUseCase,
-        _arCoreService = arCoreService;
+        _arCoreService = arCoreService,
+        _sensorFusionRepository = sensorFusionRepository;
 
   final CanvassBuildingUseCase _canvassBuildingUseCase;
   final TrackLivePositionUseCase _trackLivePositionUseCase;
   final ArCoreCanvassService _arCoreService;
+  final SensorFusionRepository? _sensorFusionRepository;
 
   bool _isSurveying = false;
   String _buildingName = '';
@@ -46,6 +50,12 @@ class CanvassingViewModel extends ChangeNotifier {
   int _stepCount = 0;
   StreamSubscription<PositionEstimate>? _posSub;
   StreamSubscription<ArPlaneData>? _planeSub;
+
+  // Active vertical staircase/elevator transition tracking
+  bool _isTraversingStairs = false;
+  VerticalTransition? _activeTransitionType;
+  int? _targetStairFloor;
+  NavNode? _stairDepartureNode;
 
   /// Whether surveying is actively recording.
   bool get isSurveying => _isSurveying;
@@ -74,6 +84,15 @@ class CanvassingViewModel extends ChangeNotifier {
   /// The step count during this survey.
   int get stepCount => _stepCount;
 
+  /// Whether the user is currently climbing or descending stairs between floors.
+  bool get isTraversingStairs => _isTraversingStairs;
+
+  /// The target floor index being climbed to or descended to.
+  int? get stairTargetFloor => _targetStairFloor;
+
+  /// The active transition type (stairs or elevator).
+  VerticalTransition? get activeTransitionType => _activeTransitionType;
+
   /// Starts a new canvassing survey session at doorway [buildingName].
   Future<void> startSurvey(String buildingName, {int initialFloorCount = 1}) async {
     _buildingName = buildingName;
@@ -82,6 +101,13 @@ class CanvassingViewModel extends ChangeNotifier {
     _detectedPlaneCount = 0;
     _stepCount = 0;
     _activeFloor = 0;
+    _isTraversingStairs = false;
+    _targetStairFloor = null;
+    _stairDepartureNode = null;
+
+    // Reset sensor fusion datum to origin to eliminate stale offset artifacts
+    _sensorFusionRepository?.resetPosition(Coordinates3D.zero);
+    _currentPosition = Coordinates3D.zero;
 
     // Seed requested initial floors (e.g. 1 to 4 floors)
     _floors.clear();
@@ -142,8 +168,8 @@ class CanvassingViewModel extends ChangeNotifier {
           ? _lastWalkNode!.position.distanceTo(_currentPosition)
           : 0.0;
 
-      // Automatically place corridor waypoints and structural planes every 1.5m or 3 steps
-      if (_lastWalkNode != null && (distSinceLast >= 1.5 || (_stepCount % 3 == 0 && distSinceLast >= 0.8))) {
+      // Automatically place corridor waypoints and structural planes every 1.5m or 3 steps (suppressed while on stairs)
+      if (!_isTraversingStairs && _lastWalkNode != null && (distSinceLast >= 1.5 || (_stepCount % 3 == 0 && distSinceLast >= 0.8))) {
         final corridorId = 'corridor_${_surveyedNodes.length}';
         final newNode = NavNode(
           id: corridorId,
@@ -314,15 +340,16 @@ class CanvassingViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Marks a vertical transition (stairs or elevator) connecting current floor to [targetFloorIndex].
-  void markVerticalTransition({
+  /// Begins a vertical transition (stairs or elevator) to [targetFloorIndex].
+  /// While climbing or descending, corridor waypoint creation is paused so stairs are not drawn as flat floor loops.
+  void startVerticalTransition({
     required VerticalTransition transitionType,
     required int targetFloorIndex,
   }) {
     _ensureFloorExists(_activeFloor);
     _ensureFloorExists(targetFloorIndex);
 
-    // 1. Departure node on current floor
+    // Departure node on current floor
     final fromId = 'trans_${transitionType.name}_f${_activeFloor}_${_surveyedNodes.length}';
     final fromNode = NavNode(
       id: fromId,
@@ -342,31 +369,61 @@ class CanvassingViewModel extends ChangeNotifier {
       ));
     }
 
-    // 2. Landing node on target floor
+    _stairDepartureNode = fromNode;
+    _isTraversingStairs = true;
+    _activeTransitionType = transitionType;
+    _targetStairFloor = targetFloorIndex;
+    notifyListeners();
+  }
+
+  /// Finalizes arrival at the landing of the target floor level.
+  void completeVerticalTransition() {
+    if (!_isTraversingStairs || _targetStairFloor == null || _stairDepartureNode == null) return;
+
+    final targetFloorIndex = _targetStairFloor!;
+    final transitionType = _activeTransitionType ?? VerticalTransition.stairs;
+    _ensureFloorExists(targetFloorIndex);
+
+    // Landing node on target floor at current physical position
     final toId = 'landing_${transitionType.name}_f${targetFloorIndex}_${_surveyedNodes.length}';
     final toNode = NavNode(
       id: toId,
-      name: '${transitionType == VerticalTransition.stairs ? "Stairs" : "Elevator"} from Floor $_activeFloor',
+      name: '${transitionType == VerticalTransition.stairs ? "Stairs" : "Elevator"} from Floor ${_stairDepartureNode!.floorIndex}',
       position: Coordinates3D(x: _currentPosition.x, y: _currentPosition.y, z: targetFloorIndex * 3.6),
       floorIndex: targetFloorIndex,
       type: transitionType == VerticalTransition.stairs ? NodeType.stairs : NodeType.elevator,
     );
     _surveyedNodes[toId] = toNode;
 
-    // 3. 3D Vertical Edge connecting both floors
+    // Direct 3D Vertical Edge connecting departure to landing
     _surveyedEdges.add(NavEdge(
-      sourceNodeId: fromId,
+      sourceNodeId: _stairDepartureNode!.id,
       targetNodeId: toId,
-      distanceMeters: (targetFloorIndex - _activeFloor).abs() * 3.6,
+      distanceMeters: (targetFloorIndex - _stairDepartureNode!.floorIndex).abs() * 3.6,
       transitionType: transitionType,
       isWheelchairAccessible: transitionType == VerticalTransition.elevator,
     ));
 
-    // Transition surveyor state to target floor
+    // Transition active floor
     _activeFloor = targetFloorIndex;
     _lastWalkNode = toNode;
     _currentPosition = toNode.position;
+    _isTraversingStairs = false;
+    _targetStairFloor = null;
+    _activeTransitionType = null;
+    _stairDepartureNode = null;
     notifyListeners();
+  }
+
+  /// Backward-compatible vertical transition caller.
+  void markVerticalTransition({
+    required VerticalTransition transitionType,
+    required int targetFloorIndex,
+  }) {
+    startVerticalTransition(
+      transitionType: transitionType,
+      targetFloorIndex: targetFloorIndex,
+    );
   }
 
   /// Finalizes the survey and bakes the 3D model into local storage.

@@ -122,6 +122,7 @@ class ServiceLocator {
       canvassBuildingUseCase: canvassBuildingUseCase,
       trackLivePositionUseCase: trackLivePositionUseCase,
       arCoreService: arCoreService,
+      sensorFusionRepository: sensorFusionRepository,
     );
   }
 
