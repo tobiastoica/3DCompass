@@ -1,6 +1,8 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:compass_3d/domain/models/building_3d_model.dart';
 import 'package:compass_3d/domain/models/coordinates_3d.dart';
+import 'package:compass_3d/domain/models/nav_node.dart';
 import 'package:compass_3d/domain/models/navigation_path.dart';
 import 'package:compass_3d/ui/core/theme/app_colors.dart';
 
