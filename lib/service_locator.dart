@@ -66,7 +66,7 @@ class ServiceLocator {
     localStorage = BuildingLocalStorage(serializer: serializer);
     final pressureStream = barometerEventStream()
         .map((e) => e.pressure)
-        .handleError((error) {
+        .handleError((Object error) {
       logger.log(LogLevel.error, 'BAROMETER', error.toString());
     });
     altimeterService = BarometricAltimeterService(pressureStream: pressureStream);

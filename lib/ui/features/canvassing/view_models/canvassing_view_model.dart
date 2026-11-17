@@ -51,11 +51,11 @@ class CanvassingViewModel extends ChangeNotifier {
   StreamSubscription<PositionEstimate>? _posSub;
   StreamSubscription<ArPlaneData>? _planeSub;
 
-  // Manhattan-World Corridor Alignment State
-  double? _primaryBuildingOrientationRad;
-  double? _activeCorridorHeadingRad;
+  // Natural Adaptive Heading & Position State (Supports 90° corners, diagonal corridors, and arbitrary angles)
+  double? _stabilizedHeadingRad;
+  double? _lastNodeHeadingRad;
   Coordinates3D _lastRawPos = Coordinates3D.zero;
-  Coordinates3D _rectifiedPosition = Coordinates3D.zero;
+  Coordinates3D _smoothedPosition = Coordinates3D.zero;
 
   // Active vertical staircase/elevator transition tracking
   bool _isTraversingStairs = false;
@@ -114,10 +114,10 @@ class CanvassingViewModel extends ChangeNotifier {
     // Reset sensor fusion datum to origin to eliminate stale offset artifacts
     _sensorFusionRepository?.resetPosition(Coordinates3D.zero);
     _currentPosition = Coordinates3D.zero;
-    _primaryBuildingOrientationRad = null;
-    _activeCorridorHeadingRad = null;
+    _stabilizedHeadingRad = null;
+    _lastNodeHeadingRad = null;
     _lastRawPos = Coordinates3D.zero;
-    _rectifiedPosition = Coordinates3D.zero;
+    _smoothedPosition = Coordinates3D.zero;
 
     // Seed requested initial floors (e.g. 1 to 4 floors)
     _floors.clear();
@@ -163,7 +163,6 @@ class CanvassingViewModel extends ChangeNotifier {
 
     // Listen to live movement
     _posSub = _trackLivePositionUseCase.execute().listen((estimate) {
-      _stepCount++;
       final headingRad = estimate.orientation.azimuthRadians;
       _currentHeadingDegrees =
           (headingRad * 180.0 / math.pi % 360.0 + 360.0) % 360.0;
@@ -185,77 +184,36 @@ class CanvassingViewModel extends ChangeNotifier {
       _lastRawPos = estimate.position;
 
       if (stepDist > 0.05) {
-        // Establish Primary Building Orientation on initial corridor traversal
-        if (_primaryBuildingOrientationRad == null) {
-          _primaryBuildingOrientationRad = headingRad;
-          _activeCorridorHeadingRad = headingRad;
-        }
+        _stepCount++;
 
-        // Manhattan-World Corridor Alignment:
-        // Find the closest orthogonal corridor axis (0°, 90°, 180°, 270° relative to building primary axis)
-        final p0 = _primaryBuildingOrientationRad!;
-        final manhattanAxes = [
-          p0,
-          p0 + math.pi / 2.0,
-          p0 + math.pi,
-          p0 - math.pi / 2.0,
-        ];
-
-        double bestAxis = p0;
-        double minDiff = double.infinity;
-        for (final axis in manhattanAxes) {
-          var diff = (headingRad - axis).abs();
-          while (diff > math.pi) diff = (diff - 2 * math.pi).abs();
-          if (diff < minDiff) {
-            minDiff = diff;
-            bestAxis = axis;
-          }
-        }
-
-        // If walking roughly along an architectural axis (within 35° / 0.61 rad), snap to it
-        final isOrthogonal = minDiff < 0.61;
-        final chosenHeading = isOrthogonal ? bestAxis : headingRad;
-
-        // Detect corner turns between orthogonal corridors
-        if (_activeCorridorHeadingRad != null && isOrthogonal) {
-          var axisTurnDiff = (chosenHeading - _activeCorridorHeadingRad!).abs();
-          while (axisTurnDiff > math.pi) axisTurnDiff = (axisTurnDiff - 2 * math.pi).abs();
-
-          if (axisTurnDiff > 0.65) {
-            // Drop a corner junction waypoint at the bend vertex
-            if (!_isTraversingStairs && _lastWalkNode != null) {
-              final junctionId = 'junction_${_surveyedNodes.length}';
-              final junctionNode = NavNode(
-                id: junctionId,
-                name: 'Corridor Corner',
-                position: _rectifiedPosition,
-                floorIndex: _activeFloor,
-                type: NodeType.hallway,
-              );
-              _surveyedNodes[junctionNode.id] = junctionNode;
-              _surveyedEdges.add(NavEdge(
-                sourceNodeId: _lastWalkNode!.id,
-                targetNodeId: junctionNode.id,
-                distanceMeters: _lastWalkNode!.position.distanceTo(_rectifiedPosition),
-                transitionType: VerticalTransition.walk,
-              ));
-              _lastWalkNode = junctionNode;
-            }
-            _activeCorridorHeadingRad = chosenHeading;
-          }
+        // Initialize stabilized heading on initial movement
+        if (_stabilizedHeadingRad == null) {
+          _stabilizedHeadingRad = headingRad;
+          _lastNodeHeadingRad = headingRad;
         } else {
-          _activeCorridorHeadingRad = chosenHeading;
+          // Normalize angular difference to [-pi, pi]
+          var diff = headingRad - _stabilizedHeadingRad!;
+          while (diff > math.pi) diff -= 2 * math.pi;
+          while (diff < -math.pi) diff += 2 * math.pi;
+
+          // Adaptive heading filter:
+          // Smoothly dampens small gait sway while rapidly following intentional turns into corners or diagonal hallways
+          final turnRatio = (diff.abs() / 0.45).clamp(0.0, 1.0);
+          final alpha = 0.18 + 0.78 * turnRatio;
+          _stabilizedHeadingRad = _stabilizedHeadingRad! + alpha * diff;
+          while (_stabilizedHeadingRad! > math.pi) _stabilizedHeadingRad = _stabilizedHeadingRad! - 2 * math.pi;
+          while (_stabilizedHeadingRad! < -math.pi) _stabilizedHeadingRad = _stabilizedHeadingRad! + 2 * math.pi;
         }
 
-        // Advance along the rectilinear corridor axis
-        final rectDx = stepDist * math.cos(chosenHeading);
-        final rectDy = stepDist * math.sin(chosenHeading);
-        _rectifiedPosition = _rectifiedPosition.translate(dx: rectDx, dy: rectDy);
+        // Advance along the stabilized walking heading
+        final dx = stepDist * math.cos(_stabilizedHeadingRad!);
+        final dy = stepDist * math.sin(_stabilizedHeadingRad!);
+        _smoothedPosition = _smoothedPosition.translate(dx: dx, dy: dy);
       }
 
       _currentPosition = Coordinates3D(
-        x: _rectifiedPosition.x,
-        y: _rectifiedPosition.y,
+        x: _smoothedPosition.x,
+        y: _smoothedPosition.y,
         z: _activeFloor * 3.6,
       );
 
@@ -263,12 +221,26 @@ class CanvassingViewModel extends ChangeNotifier {
           ? _lastWalkNode!.position.distanceTo(_currentPosition)
           : 0.0;
 
-      // Automatically place corridor waypoints and structural planes every 1.5m or 3 steps (suppressed while on stairs)
-      if (!_isTraversingStairs && _lastWalkNode != null && (distSinceLast >= 1.5 || (_stepCount % 3 == 0 && distSinceLast >= 0.8))) {
+      // Compute heading change since the last recorded node
+      var headingChangeSinceLastNode = 0.0;
+      if (_stabilizedHeadingRad != null && _lastNodeHeadingRad != null) {
+        headingChangeSinceLastNode = (_stabilizedHeadingRad! - _lastNodeHeadingRad!).abs();
+        while (headingChangeSinceLastNode > math.pi) {
+          headingChangeSinceLastNode = (headingChangeSinceLastNode - 2 * math.pi).abs();
+        }
+      }
+
+      // Automatically place corridor waypoints and structural planes:
+      // A) Corner / Turn Waypoint: When user turned > 25° (0.44 rad) and moved at least 1.2m
+      // B) Straight Corridor Waypoint: Every 2.5m to maintain clean topological graph
+      final isTurn = headingChangeSinceLastNode > 0.44 && distSinceLast >= 1.2;
+      final isStraightInterval = distSinceLast >= 2.5;
+
+      if (!_isTraversingStairs && _lastWalkNode != null && (isTurn || isStraightInterval)) {
         final corridorId = 'corridor_${_surveyedNodes.length}';
         final newNode = NavNode(
           id: corridorId,
-          name: 'Corridor WP',
+          name: isTurn ? 'Corridor Turn' : 'Corridor WP',
           position: _currentPosition,
           floorIndex: _activeFloor,
           type: NodeType.hallway,
@@ -279,15 +251,17 @@ class CanvassingViewModel extends ChangeNotifier {
           sourceNodeId: _lastWalkNode!.id,
           targetNodeId: newNode.id,
           distanceMeters: distSinceLast,
-          transitionType: VerticalTransition.walk,
         ));
+
+        _lastNodeHeadingRad = _stabilizedHeadingRad;
 
         // Compute true perpendicular normal for corridor walls (transverse to direction of travel)
         final dirX = _currentPosition.x - _lastWalkNode!.position.x;
         final dirY = _currentPosition.y - _lastWalkNode!.position.y;
         final segLen = math.sqrt(dirX * dirX + dirY * dirY);
-        final normX = segLen > 0.01 ? (-dirY / segLen) * 1.2 : 1.2;
-        final normY = segLen > 0.01 ? (dirX / segLen) * 1.2 : 0.0;
+        const corridorHalfWidth = 0.8; // Realistic 1.6m wide corridor (0.8m half-width)
+        final normX = segLen > 0.01 ? (-dirY / segLen) * corridorHalfWidth : corridorHalfWidth;
+        final normY = segLen > 0.01 ? (dirX / segLen) * corridorHalfWidth : 0.0;
 
         final p1 = _lastWalkNode!.position;
         final p2 = _currentPosition;
@@ -297,11 +271,11 @@ class CanvassingViewModel extends ChangeNotifier {
         final rightP1 = p1.translate(dx: -normX, dy: -normY);
         final rightP2 = p2.translate(dx: -normX, dy: -normY);
 
-        // 1. Emit structural corridor floor plane
+        // 1. Emit structural corridor floor plane (1.6m wide)
         _arCoreService.emitPlane(ArPlaneData(
           id: 'plane_corridor_${_surveyedNodes.length}',
           center: _currentPosition,
-          extentX: 2.4,
+          extentX: 1.6,
           extentZ: distSinceLast.clamp(1.0, 4.0),
           type: ArPlaneType.horizontalUpwardFacing,
           boundaryPolygon: [leftP1, rightP1, rightP2, leftP2],
@@ -439,10 +413,10 @@ class CanvassingViewModel extends ChangeNotifier {
         sourceNodeId: _lastWalkNode!.id,
         targetNodeId: id,
         distanceMeters: _lastWalkNode!.position.distanceTo(node.position),
-        transitionType: VerticalTransition.walk,
       ));
     }
     _lastWalkNode = node;
+    _lastNodeHeadingRad = _stabilizedHeadingRad;
     notifyListeners();
   }
 
@@ -471,7 +445,6 @@ class CanvassingViewModel extends ChangeNotifier {
         sourceNodeId: _lastWalkNode!.id,
         targetNodeId: fromId,
         distanceMeters: _lastWalkNode!.position.distanceTo(fromNode.position),
-        transitionType: VerticalTransition.walk,
       ));
     }
 
@@ -513,6 +486,7 @@ class CanvassingViewModel extends ChangeNotifier {
     // Transition active floor
     _activeFloor = targetFloorIndex;
     _lastWalkNode = toNode;
+    _lastNodeHeadingRad = _stabilizedHeadingRad;
     _currentPosition = toNode.position;
     _isTraversingStairs = false;
     _targetStairFloor = null;
@@ -536,8 +510,8 @@ class CanvassingViewModel extends ChangeNotifier {
   Future<bool> finishSurvey() async {
     try {
       await _arCoreService.stopSession();
-      _posSub?.cancel();
-      _planeSub?.cancel();
+      await _posSub?.cancel();
+      await _planeSub?.cancel();
       _trackLivePositionUseCase.stop();
 
       // Ensure every surveyed floor exists in _floors

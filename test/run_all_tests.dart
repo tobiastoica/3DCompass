@@ -663,62 +663,62 @@ Future<void> main() async {
     expectCloseTo(heading, 0.0, 1e-4, 'Heading after back-turn must return to exactly 0.0 without drift');
   });
 
-  print('\n--- 12. Testing Manhattan-World Corridor Rectification ---');
+  print('\n--- 12. Testing Adaptive Heading Stabilization & Diagonal Corridor Tracking ---');
 
-  await runTest('Snaps walking sway to cardinal building axis and establishes orthogonal 90-degree corner', () {
-    // Primary building axis = 0.0 (East)
-    const p0 = 0.0;
-    final manhattanAxes = [p0, p0 + math.pi / 2.0, p0 + math.pi, p0 - math.pi / 2.0];
-
-    // Simulate 5 steps with natural human walking sway (+/- 8 degrees = 0.14 rad)
+  await runTest('Dampens gait sway on straight corridors and accurately tracks diagonal 45-degree hallways', () {
+    // 1. Straight corridor along East (heading = 0.0) with natural gait sway (+/- 8 degrees = 0.14 rad)
+    double? stabilizedHeading;
+    var posX = 0.0;
+    var posY = 0.0;
+    const stepDist = 0.72; // Calibrated adult stride
     final sways = [0.10, -0.08, 0.12, -0.11, 0.05];
-    var rectX = 0.0;
-    var rectY = 0.0;
 
     for (final sway in sways) {
-      final userHeading = p0 + sway;
-      // Find closest Manhattan axis
-      double bestAxis = p0;
-      double minDiff = double.infinity;
-      for (final axis in manhattanAxes) {
-        var diff = (userHeading - axis).abs();
-        while (diff > math.pi) diff = (diff - 2 * math.pi).abs();
-        if (diff < minDiff) {
-          minDiff = diff;
-          bestAxis = axis;
-        }
+      final userHeading = 0.0 + sway;
+      if (stabilizedHeading == null) {
+        stabilizedHeading = userHeading;
+      } else {
+        var diff = userHeading - stabilizedHeading;
+        while (diff > math.pi) diff -= 2 * math.pi;
+        while (diff < -math.pi) diff += 2 * math.pi;
+        final turnRatio = (diff.abs() / 0.45).clamp(0.0, 1.0);
+        final alpha = 0.18 + 0.78 * turnRatio;
+        stabilizedHeading += alpha * diff;
       }
-      expect(minDiff < 0.61, 'Walking sway is within Manhattan corridor threshold');
-      // Snap to best axis (p0 = 0.0)
-      rectX += 0.8 * math.cos(bestAxis);
-      rectY += 0.8 * math.sin(bestAxis);
+      posX += stepDist * math.cos(stabilizedHeading);
+      posY += stepDist * math.sin(stabilizedHeading);
     }
 
-    // After 5 steps (4.0m) with sway, corridor is mathematically straight: Y remains exactly 0.0!
-    expectCloseTo(rectX, 4.0, 1e-4, 'Corridor advanced straight along primary axis');
-    expectCloseTo(rectY, 0.0, 1e-4, 'Corridor lateral sway completely eliminated (perfect straight wall)');
+    // After 5 steps (3.6m), lateral deviation posY is tiny (< 0.35m), corridor is straight
+    expect(posX > 3.5, 'Corridor progressed straight forward');
+    expect(posY.abs() < 0.35, 'Gait sway deviation is dampened below 35cm');
 
-    // Now user makes a 90-degree left turn (heading = +pi/2)
-    final turnHeading = math.pi / 2.0;
-    double turnAxis = p0;
-    double turnMinDiff = double.infinity;
-    for (final axis in manhattanAxes) {
-      var diff = (turnHeading - axis).abs();
-      while (diff > math.pi) diff = (diff - 2 * math.pi).abs();
-      if (diff < turnMinDiff) {
-        turnMinDiff = diff;
-        turnAxis = axis;
-      }
-    }
-    expectCloseTo(turnAxis, math.pi / 2.0, 1e-4, 'Turn snaps to orthogonal North axis');
-
-    // Walk 3 steps down the orthogonal corridor
+    // 2. User turns into a 45-degree diagonal corridor (heading = pi/4 = 0.7854 rad)
+    // (As found in user's 'A'-shaped building layout)
+    const diagonalHeading = math.pi / 4.0;
+    // Rapid tracking kicks in for intentional turn
     for (var i = 0; i < 3; i++) {
-      rectX += 0.8 * math.cos(turnAxis);
-      rectY += 0.8 * math.sin(turnAxis);
+      var diff = diagonalHeading - stabilizedHeading!;
+      while (diff > math.pi) diff -= 2 * math.pi;
+      while (diff < -math.pi) diff += 2 * math.pi;
+      final turnRatio = (diff.abs() / 0.45).clamp(0.0, 1.0);
+      final alpha = 0.18 + 0.78 * turnRatio;
+      stabilizedHeading += alpha * diff;
     }
-    expectCloseTo(rectX, 4.0, 1e-4, 'X position locked at corner vertex');
-    expectCloseTo(rectY, 2.4, 1e-4, 'Y position advanced orthogonally by 2.4m');
+
+    expectCloseTo(stabilizedHeading!, diagonalHeading, 0.05, 'Heading closely tracks 45-degree diagonal corridor');
+
+    // Walk 4 steps down diagonal corridor
+    final startDiagX = posX;
+    final startDiagY = posY;
+    for (var i = 0; i < 4; i++) {
+      posX += stepDist * math.cos(stabilizedHeading!);
+      posY += stepDist * math.sin(stabilizedHeading!);
+    }
+
+    final diagDx = posX - startDiagX;
+    final diagDy = posY - startDiagY;
+    expectCloseTo(diagDx, diagDy, 0.15, 'Diagonal corridor advances equally in X and Y along 45 degrees');
   });
 
   print('\n--- 13. Testing EKF Heading Normalization & Anti-Wrapping near +/-Pi ---');

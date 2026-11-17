@@ -57,6 +57,7 @@ class InertiaPdrService {
 
   double _currentHeadingRadians = 0.0;
   double _walkingHeadingRadians = 0.0;
+  double _filteredMagnitude = 0.0;
   double _lastMagnitude = 0.0;
   bool _isRising = false;
   double _peakAccel = 0.0;
@@ -72,10 +73,10 @@ class InertiaPdrService {
   double _lastOmegaVertical = 0.0;
   bool _hasMagAnchor = false;
 
-  // Weinberg model constant (calibrated for human indoor gait)
-  static const double _weinbergK = 0.42;
-  static const double _stepThreshold = 1.2; // m/s^2 above resting gravity
-  static const int _minStepIntervalMs = 260; // Minimum duration between human steps
+  // Calibrated for natural adult indoor walking (0.72m base stride length)
+  static const double _baseStepLengthMeters = 0.72;
+  static const double _stepThreshold = 0.45; // m/s^2 above resting (detects phone-in-hand gait)
+  static const int _minStepIntervalMs = 280; // Minimum duration between human steps (max 3.5 steps/sec)
 
   /// The stream of detected pedestrian step displacements.
   Stream<PdrStepEvent> get stepStream => _stepController.stream;
@@ -176,12 +177,16 @@ class InertiaPdrService {
       }
     });
 
-    // 4. User Accelerometer: Weinberg step detection & stride length estimation
+    // 4. User Accelerometer: Filtered step detection & physiological stride length
     _userAccelSub = _accelerometerStream.listen((accel) {
       final now = DateTime.now().millisecondsSinceEpoch;
-      final magnitude = math.sqrt(
+      final rawMagnitude = math.sqrt(
         accel.x * accel.x + accel.y * accel.y + accel.z * accel.z,
       );
+
+      // Low-pass filter to reject IMU sensor noise spikes while tracking ~1.8 Hz footstep cadence
+      _filteredMagnitude = 0.60 * _filteredMagnitude + 0.40 * rawMagnitude;
+      final magnitude = _filteredMagnitude;
 
       // Detect peak / valley transitions
       if (magnitude > _lastMagnitude) {
@@ -194,18 +199,19 @@ class InertiaPdrService {
           _isRising = false;
           _peakAccel = _lastMagnitude;
 
-          // Check if peak exceeds dynamic threshold and minimum step interval has elapsed
-          if (_peakAccel > _stepThreshold && (now - _lastStepTimestampMs) > _minStepIntervalMs) {
+          final bounce = _peakAccel - _valleyAccel;
+          // Trigger step on valid heel-strike peak exceeding dynamic threshold
+          if (_peakAccel > _stepThreshold && bounce > 0.30 && (now - _lastStepTimestampMs) > _minStepIntervalMs) {
             _lastStepTimestampMs = now;
-            final bounce = math.max(0.1, _peakAccel - _valleyAccel);
-            final strideLength = _weinbergK * math.pow(bounce, 0.25);
 
-            // Clamp stride length between realistic bounds (0.35m - 1.20m)
-            final clampedStride = strideLength.clamp(0.35, 1.20).toDouble();
+            // Physiological adult indoor stride length (0.65m - 0.88m, centered at 0.72m)
+            final strideLength = (_baseStepLengthMeters * (0.88 + 0.18 * math.pow(bounce.clamp(0.2, 2.5), 0.35)))
+                .clamp(0.65, 0.88)
+                .toDouble();
 
-            // Steps propagate along the smoothed body walking heading
+            // Steps propagate along the real-time walking heading
             _stepController.add(PdrStepEvent(
-              stepLengthMeters: clampedStride,
+              stepLengthMeters: strideLength,
               headingRadians: _walkingHeadingRadians,
               timestamp: DateTime.fromMillisecondsSinceEpoch(now),
             ));
