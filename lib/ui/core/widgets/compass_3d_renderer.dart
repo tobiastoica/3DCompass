@@ -82,19 +82,20 @@ class Compass3DRenderer extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ] else ...[
-                      const Text(
-                        '3D Compass',
-                        style: TextStyle(
-                          fontSize: 14,
+                      Text(
+                        '${((360.0 - targetAzimuthDegrees) % 360.0).round()}° ${_cardinalLabel(360.0 - targetAzimuthDegrees)}',
+                        style: const TextStyle(
+                          fontSize: 15,
                           fontWeight: FontWeight.bold,
-                          color: Colors.white70,
+                          color: AppColors.cyanAccent,
+                          letterSpacing: 0.5,
                         ),
                       ),
                       const Text(
-                        'Ready',
+                        'Magnetic North',
                         style: TextStyle(
-                          fontSize: 11,
-                          color: AppColors.cyanAccent,
+                          fontSize: 10,
+                          color: Colors.white70,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -107,6 +108,18 @@ class Compass3DRenderer extends StatelessWidget {
         );
       },
     );
+  }
+
+  String _cardinalLabel(double deg) {
+    final normalized = (deg % 360.0 + 360.0) % 360.0;
+    if (normalized >= 337.5 || normalized < 22.5) return 'N';
+    if (normalized < 67.5) return 'NE';
+    if (normalized < 112.5) return 'E';
+    if (normalized < 157.5) return 'SE';
+    if (normalized < 202.5) return 'S';
+    if (normalized < 247.5) return 'SW';
+    if (normalized < 292.5) return 'W';
+    return 'NW';
   }
 }
 

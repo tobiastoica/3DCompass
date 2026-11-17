@@ -63,7 +63,7 @@ class ExtendedKalmanFilter {
     _p[3] = 0.05;
     _p[4] = 0.05;
     _p[5] = 0.05;
-    _p[6] = 0.02;
+    _p[6] = _qHeading;
   }
 
   /// Predicts the state forward upon a detected PDR step event.
@@ -71,11 +71,13 @@ class ExtendedKalmanFilter {
     required double stepLengthMeters,
     required double measuredHeadingRadians,
   }) {
-    // Process noise allows heading to track turns
-    _p[6] += 0.25;
-    final kHeading = _p[6] / (_p[6] + 0.08);
-    _x[6] = _x[6] + kHeading * (measuredHeadingRadians - _x[6]);
-    _p[6] = (1.0 - kHeading) * _p[6];
+    // Heading is integrated directly by the high-frequency gyroscope AHRS.
+    // Wrap to [-pi, pi] cleanly with zero phase lag or wrap-around jumping.
+    var heading = measuredHeadingRadians;
+    while (heading > math.pi) heading -= 2 * math.pi;
+    while (heading < -math.pi) heading += 2 * math.pi;
+    _x[6] = heading;
+    _p[6] = _qHeading;
 
     // Compute step displacement vector
     final dx = stepLengthMeters * math.cos(_x[6]);

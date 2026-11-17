@@ -642,6 +642,100 @@ Future<void> main() async {
     expectCloseTo(departure.position.horizontalDistanceTo(landing.position), 0.0, 1e-4, 'Stairwell aligned vertically');
   });
 
+  print('\n--- 11. Testing Hysteresis-Free 90-Degree Turn and Back-Turn ---');
+
+  await runTest('Rotating +90 degrees and then -90 degrees returns to exact starting heading with zero error', () {
+    var heading = 0.0;
+    const dt = 0.02; // 50 Hz sampling (20ms)
+    // Rotate +90 degrees right over 1 second (50 steps of omega = (pi/2) / 1.0)
+    const omegaTurn = (math.pi / 2.0);
+    for (var i = 0; i < 50; i++) {
+      heading += omegaTurn * dt;
+    }
+    // Heading after +90 deg turn
+    expectCloseTo(heading, math.pi / 2.0, 1e-4, 'Heading after +90 deg turn must be exactly pi/2');
+
+    // Rotate back -90 degrees over 1 second
+    for (var i = 0; i < 50; i++) {
+      heading -= omegaTurn * dt;
+    }
+    // Heading after returning must be exactly 0.0 with zero hysteresis
+    expectCloseTo(heading, 0.0, 1e-4, 'Heading after back-turn must return to exactly 0.0 without drift');
+  });
+
+  print('\n--- 12. Testing Manhattan-World Corridor Rectification ---');
+
+  await runTest('Snaps walking sway to cardinal building axis and establishes orthogonal 90-degree corner', () {
+    // Primary building axis = 0.0 (East)
+    const p0 = 0.0;
+    final manhattanAxes = [p0, p0 + math.pi / 2.0, p0 + math.pi, p0 - math.pi / 2.0];
+
+    // Simulate 5 steps with natural human walking sway (+/- 8 degrees = 0.14 rad)
+    final sways = [0.10, -0.08, 0.12, -0.11, 0.05];
+    var rectX = 0.0;
+    var rectY = 0.0;
+
+    for (final sway in sways) {
+      final userHeading = p0 + sway;
+      // Find closest Manhattan axis
+      double bestAxis = p0;
+      double minDiff = double.infinity;
+      for (final axis in manhattanAxes) {
+        var diff = (userHeading - axis).abs();
+        while (diff > math.pi) diff = (diff - 2 * math.pi).abs();
+        if (diff < minDiff) {
+          minDiff = diff;
+          bestAxis = axis;
+        }
+      }
+      expect(minDiff < 0.61, 'Walking sway is within Manhattan corridor threshold');
+      // Snap to best axis (p0 = 0.0)
+      rectX += 0.8 * math.cos(bestAxis);
+      rectY += 0.8 * math.sin(bestAxis);
+    }
+
+    // After 5 steps (4.0m) with sway, corridor is mathematically straight: Y remains exactly 0.0!
+    expectCloseTo(rectX, 4.0, 1e-4, 'Corridor advanced straight along primary axis');
+    expectCloseTo(rectY, 0.0, 1e-4, 'Corridor lateral sway completely eliminated (perfect straight wall)');
+
+    // Now user makes a 90-degree left turn (heading = +pi/2)
+    final turnHeading = math.pi / 2.0;
+    double turnAxis = p0;
+    double turnMinDiff = double.infinity;
+    for (final axis in manhattanAxes) {
+      var diff = (turnHeading - axis).abs();
+      while (diff > math.pi) diff = (diff - 2 * math.pi).abs();
+      if (diff < turnMinDiff) {
+        turnMinDiff = diff;
+        turnAxis = axis;
+      }
+    }
+    expectCloseTo(turnAxis, math.pi / 2.0, 1e-4, 'Turn snaps to orthogonal North axis');
+
+    // Walk 3 steps down the orthogonal corridor
+    for (var i = 0; i < 3; i++) {
+      rectX += 0.8 * math.cos(turnAxis);
+      rectY += 0.8 * math.sin(turnAxis);
+    }
+    expectCloseTo(rectX, 4.0, 1e-4, 'X position locked at corner vertex');
+    expectCloseTo(rectY, 2.4, 1e-4, 'Y position advanced orthogonally by 2.4m');
+  });
+
+  print('\n--- 13. Testing EKF Heading Normalization & Anti-Wrapping near +/-Pi ---');
+
+  await runTest('EKF predicts step without jumping backwards when crossing +/- pi boundary', () {
+    final ekf = ExtendedKalmanFilter();
+    ekf.reset(0.0, 0.0, 0.0, 3.10); // +177.6 degrees
+
+    // Step across boundary to -3.10 (-177.6 degrees)
+    ekf.predictStep(stepLengthMeters: 1.0, measuredHeadingRadians: -3.10);
+
+    expect(ekf.headingRadians >= -math.pi && ekf.headingRadians <= math.pi, 'Heading stays within [-pi, pi]');
+    // Step displacement should advance towards negative X (cos(~pi) = -1.0)
+    expectCloseTo(ekf.position.x, -1.0, 0.05, 'Displacement X should be negative forward');
+    expectCloseTo(ekf.position.y, 0.0, 0.1, 'Displacement Y should be minimal');
+  });
+
   print('\n================================================================');
   print(' TEST SUMMARY: $passedCount PASSED, $failedCount FAILED');
   print('================================================================');

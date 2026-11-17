@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:compass_3d/ui/core/theme/app_colors.dart';

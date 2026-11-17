@@ -1,4 +1,3 @@
-import 'coordinates_3d.dart';
 import 'floor_level.dart';
 import 'nav_graph_3d.dart';
 import 'nav_node.dart';

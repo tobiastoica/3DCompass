@@ -51,6 +51,12 @@ class CanvassingViewModel extends ChangeNotifier {
   StreamSubscription<PositionEstimate>? _posSub;
   StreamSubscription<ArPlaneData>? _planeSub;
 
+  // Manhattan-World Corridor Alignment State
+  double? _primaryBuildingOrientationRad;
+  double? _activeCorridorHeadingRad;
+  Coordinates3D _lastRawPos = Coordinates3D.zero;
+  Coordinates3D _rectifiedPosition = Coordinates3D.zero;
+
   // Active vertical staircase/elevator transition tracking
   bool _isTraversingStairs = false;
   VerticalTransition? _activeTransitionType;
@@ -108,6 +114,10 @@ class CanvassingViewModel extends ChangeNotifier {
     // Reset sensor fusion datum to origin to eliminate stale offset artifacts
     _sensorFusionRepository?.resetPosition(Coordinates3D.zero);
     _currentPosition = Coordinates3D.zero;
+    _primaryBuildingOrientationRad = null;
+    _activeCorridorHeadingRad = null;
+    _lastRawPos = Coordinates3D.zero;
+    _rectifiedPosition = Coordinates3D.zero;
 
     // Seed requested initial floors (e.g. 1 to 4 floors)
     _floors.clear();
@@ -154,13 +164,98 @@ class CanvassingViewModel extends ChangeNotifier {
     // Listen to live movement
     _posSub = _trackLivePositionUseCase.execute().listen((estimate) {
       _stepCount++;
+      final headingRad = estimate.orientation.azimuthRadians;
       _currentHeadingDegrees =
-          (estimate.orientation.azimuthRadians * 180.0 / math.pi % 360.0 + 360.0) % 360.0;
+          (headingRad * 180.0 / math.pi % 360.0 + 360.0) % 360.0;
 
-      // In survey mode, horizontal tracking comes from PDR, while activeFloor stays pinned to user selection
+      // Automatic Floor Level Transition Detection via Barometer
+      if (estimate.floorIndex != _activeFloor) {
+        if (_isTraversingStairs && _targetStairFloor == estimate.floorIndex) {
+          completeVerticalTransition();
+        } else if (!_isTraversingStairs) {
+          _activeFloor = estimate.floorIndex;
+          _ensureFloorExists(_activeFloor);
+        }
+      }
+
+      // Compute displacement delta from raw sensor fusion
+      final rawDx = estimate.position.x - _lastRawPos.x;
+      final rawDy = estimate.position.y - _lastRawPos.y;
+      final stepDist = math.sqrt(rawDx * rawDx + rawDy * rawDy);
+      _lastRawPos = estimate.position;
+
+      if (stepDist > 0.05) {
+        // Establish Primary Building Orientation on initial corridor traversal
+        if (_primaryBuildingOrientationRad == null) {
+          _primaryBuildingOrientationRad = headingRad;
+          _activeCorridorHeadingRad = headingRad;
+        }
+
+        // Manhattan-World Corridor Alignment:
+        // Find the closest orthogonal corridor axis (0°, 90°, 180°, 270° relative to building primary axis)
+        final p0 = _primaryBuildingOrientationRad!;
+        final manhattanAxes = [
+          p0,
+          p0 + math.pi / 2.0,
+          p0 + math.pi,
+          p0 - math.pi / 2.0,
+        ];
+
+        double bestAxis = p0;
+        double minDiff = double.infinity;
+        for (final axis in manhattanAxes) {
+          var diff = (headingRad - axis).abs();
+          while (diff > math.pi) diff = (diff - 2 * math.pi).abs();
+          if (diff < minDiff) {
+            minDiff = diff;
+            bestAxis = axis;
+          }
+        }
+
+        // If walking roughly along an architectural axis (within 35° / 0.61 rad), snap to it
+        final isOrthogonal = minDiff < 0.61;
+        final chosenHeading = isOrthogonal ? bestAxis : headingRad;
+
+        // Detect corner turns between orthogonal corridors
+        if (_activeCorridorHeadingRad != null && isOrthogonal) {
+          var axisTurnDiff = (chosenHeading - _activeCorridorHeadingRad!).abs();
+          while (axisTurnDiff > math.pi) axisTurnDiff = (axisTurnDiff - 2 * math.pi).abs();
+
+          if (axisTurnDiff > 0.65) {
+            // Drop a corner junction waypoint at the bend vertex
+            if (!_isTraversingStairs && _lastWalkNode != null) {
+              final junctionId = 'junction_${_surveyedNodes.length}';
+              final junctionNode = NavNode(
+                id: junctionId,
+                name: 'Corridor Corner',
+                position: _rectifiedPosition,
+                floorIndex: _activeFloor,
+                type: NodeType.hallway,
+              );
+              _surveyedNodes[junctionNode.id] = junctionNode;
+              _surveyedEdges.add(NavEdge(
+                sourceNodeId: _lastWalkNode!.id,
+                targetNodeId: junctionNode.id,
+                distanceMeters: _lastWalkNode!.position.distanceTo(_rectifiedPosition),
+                transitionType: VerticalTransition.walk,
+              ));
+              _lastWalkNode = junctionNode;
+            }
+            _activeCorridorHeadingRad = chosenHeading;
+          }
+        } else {
+          _activeCorridorHeadingRad = chosenHeading;
+        }
+
+        // Advance along the rectilinear corridor axis
+        final rectDx = stepDist * math.cos(chosenHeading);
+        final rectDy = stepDist * math.sin(chosenHeading);
+        _rectifiedPosition = _rectifiedPosition.translate(dx: rectDx, dy: rectDy);
+      }
+
       _currentPosition = Coordinates3D(
-        x: estimate.position.x,
-        y: estimate.position.y,
+        x: _rectifiedPosition.x,
+        y: _rectifiedPosition.y,
         z: _activeFloor * 3.6,
       );
 
@@ -187,6 +282,21 @@ class CanvassingViewModel extends ChangeNotifier {
           transitionType: VerticalTransition.walk,
         ));
 
+        // Compute true perpendicular normal for corridor walls (transverse to direction of travel)
+        final dirX = _currentPosition.x - _lastWalkNode!.position.x;
+        final dirY = _currentPosition.y - _lastWalkNode!.position.y;
+        final segLen = math.sqrt(dirX * dirX + dirY * dirY);
+        final normX = segLen > 0.01 ? (-dirY / segLen) * 1.2 : 1.2;
+        final normY = segLen > 0.01 ? (dirX / segLen) * 1.2 : 0.0;
+
+        final p1 = _lastWalkNode!.position;
+        final p2 = _currentPosition;
+
+        final leftP1 = p1.translate(dx: normX, dy: normY);
+        final leftP2 = p2.translate(dx: normX, dy: normY);
+        final rightP1 = p1.translate(dx: -normX, dy: -normY);
+        final rightP2 = p2.translate(dx: -normX, dy: -normY);
+
         // 1. Emit structural corridor floor plane
         _arCoreService.emitPlane(ArPlaneData(
           id: 'plane_corridor_${_surveyedNodes.length}',
@@ -194,40 +304,36 @@ class CanvassingViewModel extends ChangeNotifier {
           extentX: 2.4,
           extentZ: distSinceLast.clamp(1.0, 4.0),
           type: ArPlaneType.horizontalUpwardFacing,
-          boundaryPolygon: [
-            _lastWalkNode!.position.translate(dx: -1.2),
-            _lastWalkNode!.position.translate(dx: 1.2),
-            _currentPosition.translate(dx: 1.2),
-            _currentPosition.translate(dx: -1.2),
-          ],
+          boundaryPolygon: [leftP1, rightP1, rightP2, leftP2],
         ));
 
-        // 2. Emit structural left and right wall planes
+        // 2. Emit structural left wall plane (Floor to 3m ceiling)
         _arCoreService.emitPlane(ArPlaneData(
           id: 'plane_wall_l_${_surveyedNodes.length}',
-          center: _currentPosition.translate(dx: -1.2, dz: 1.5),
+          center: p2.translate(dx: normX, dy: normY, dz: 1.5),
           extentX: distSinceLast.clamp(1.0, 4.0),
           extentZ: 3.0,
           type: ArPlaneType.vertical,
           boundaryPolygon: [
-            _lastWalkNode!.position.translate(dx: -1.2),
-            _currentPosition.translate(dx: -1.2),
-            _currentPosition.translate(dx: -1.2, dz: 3.0),
-            _lastWalkNode!.position.translate(dx: -1.2, dz: 3.0),
+            leftP1,
+            leftP2,
+            leftP2.translate(dz: 3.0),
+            leftP1.translate(dz: 3.0),
           ],
         ));
 
+        // 3. Emit structural right wall plane (Floor to 3m ceiling)
         _arCoreService.emitPlane(ArPlaneData(
           id: 'plane_wall_r_${_surveyedNodes.length}',
-          center: _currentPosition.translate(dx: 1.2, dz: 1.5),
+          center: p2.translate(dx: -normX, dy: -normY, dz: 1.5),
           extentX: distSinceLast.clamp(1.0, 4.0),
           extentZ: 3.0,
           type: ArPlaneType.vertical,
           boundaryPolygon: [
-            _lastWalkNode!.position.translate(dx: 1.2),
-            _currentPosition.translate(dx: 1.2),
-            _currentPosition.translate(dx: 1.2, dz: 3.0),
-            _lastWalkNode!.position.translate(dx: 1.2, dz: 3.0),
+            rightP1,
+            rightP2,
+            rightP2.translate(dz: 3.0),
+            rightP1.translate(dz: 3.0),
           ],
         ));
 

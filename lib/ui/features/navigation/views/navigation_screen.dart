@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:compass_3d/domain/models/building_3d_model.dart';
 import 'package:compass_3d/domain/models/nav_node.dart';
 import 'package:compass_3d/ui/core/constants/app_breakpoints.dart';
 import 'package:compass_3d/ui/core/theme/app_colors.dart';
 import 'package:compass_3d/ui/core/widgets/floor_level_selector.dart';
 import 'package:compass_3d/ui/core/widgets/sensor_status_badge.dart';
-import 'package:compass_3d/ui/features/doorway_checkin/views/doorway_checkin_dialog.dart';
 import '../view_models/navigation_view_model.dart';
 import 'widgets/floor_map_canvas.dart';
 import 'widgets/navigation_hud_overlay.dart';
@@ -82,7 +82,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
     );
   }
 
-  Widget _buildExpandedLayout(dynamic building) {
+  Widget _buildExpandedLayout(Building3DModel? building) {
     return Row(
       children: [
         Expanded(
@@ -143,7 +143,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
     );
   }
 
-  Widget _buildCompactLayout(dynamic building) {
+  Widget _buildCompactLayout(Building3DModel? building) {
     return Stack(
       fit: StackFit.expand,
       children: [

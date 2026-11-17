@@ -1,3 +1,4 @@
+import 'coordinates_3d.dart';
 import 'nav_edge.dart';
 import 'nav_node.dart';
 
@@ -35,7 +36,7 @@ class NavGraph3D {
   }
 
   /// Returns the closest node to [targetPosition] on the specified [floorIndex].
-  NavNode? findClosestNode(dynamic targetPosition, int floorIndex) {
+  NavNode? findClosestNode(Coordinates3D targetPosition, int floorIndex) {
     final floorNodes = getNodesForFloor(floorIndex);
     if (floorNodes.isEmpty) return null;
 

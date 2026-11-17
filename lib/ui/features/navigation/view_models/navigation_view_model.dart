@@ -71,10 +71,15 @@ class NavigationViewModel extends ChangeNotifier {
   /// Whether routing avoids stairs and prefers elevators.
   bool get preferElevatorOnly => _preferElevatorOnly;
 
-  /// Horizontal compass bearing in degrees toward the next waypoint relative to device orientation.
+  /// Horizontal compass bearing in degrees toward the next waypoint relative to device orientation,
+  /// or relative magnetic north when in free exploration mode.
   double get bearingToTarget {
     final nextWp = _getNextTargetCoordinate();
-    if (nextWp == null) return 0.0;
+    if (nextWp == null) {
+      // Free 3D compass mode: Point to North relative to phone forward heading
+      final relativeNorthDeg = -(_userHeadingRad * 180.0 / math.pi);
+      return (relativeNorthDeg % 360.0 + 360.0) % 360.0;
+    }
 
     final dx = nextWp.x - _userPosition.x;
     final dy = nextWp.y - _userPosition.y;
@@ -259,6 +264,13 @@ class NavigationViewModel extends ChangeNotifier {
     } else {
       _currentInstruction = 'Follow arrow to ${_targetDestination!.name}';
     }
+  }
+
+  /// Resets position tracking to [coordinates].
+  void resetPosition(Coordinates3D coordinates) {
+    _sensorFusionRepository.resetPosition(coordinates);
+    _userPosition = coordinates;
+    notifyListeners();
   }
 
   @override
