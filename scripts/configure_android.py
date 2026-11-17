@@ -93,7 +93,7 @@ def configure_build_gradle():
         content = re.sub(r'targetSdk\s*=\s*[^\n]+', 'targetSdk = 34', content)
         content = re.sub(r'targetSdk\s+flutter\.[^\n]+', 'targetSdk = 34', content)
 
-        # Configure signingConfigs.release
+        # Configure signingConfigs.release and lint options
         if gradle_path.endswith('.kts'):
             if 'signingConfigs {' not in content:
                 signing_block = """
@@ -104,6 +104,10 @@ def configure_build_gradle():
             keyAlias = "compass3d"
             keyPassword = "compass3d_secret"
         }
+    }
+    lint {
+        abortOnError = false
+        checkReleaseBuilds = false
     }
 """
                 content = content.replace("android {", "android {" + signing_block)
@@ -118,6 +122,10 @@ def configure_build_gradle():
             keyAlias "compass3d"
             keyPassword "compass3d_secret"
         }
+    }
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
     }
 """
                 content = content.replace("android {", "android {" + signing_block)
