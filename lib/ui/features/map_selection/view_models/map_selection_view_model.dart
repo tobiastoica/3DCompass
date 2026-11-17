@@ -41,4 +41,10 @@ class MapSelectionViewModel extends ChangeNotifier {
   void selectBuilding(Building3DModel building) {
     _navigationRepository.setActiveBuilding(building);
   }
+
+  /// Deletes a building by [buildingId] from local storage and refreshes the list.
+  Future<void> deleteBuilding(String buildingId) async {
+    await _buildingRepository.deleteBuilding(buildingId);
+    await loadBuildings();
+  }
 }

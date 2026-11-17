@@ -58,6 +58,11 @@ class _NavigationScreenState extends State<NavigationScreen> {
                 tooltip: 'How to Navigate',
                 onPressed: () => _showHelpDialog(context),
               ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                tooltip: 'Delete Building',
+                onPressed: () => _confirmDeleteCurrentBuilding(context),
+              ),
               Padding(
                 padding: const EdgeInsets.only(right: 12.0),
                 child: SensorStatusBadge(
@@ -371,6 +376,64 @@ class _NavigationScreenState extends State<NavigationScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _confirmDeleteCurrentBuilding(BuildContext context) async {
+    final buildingName = widget.viewModel.buildingName;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.delete_forever, color: Colors.redAccent, size: 28),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Delete "$buildingName"?',
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to permanently delete "$buildingName" and all its mapped floors? You will return to the home screen.',
+          style: const TextStyle(color: Colors.white70, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      await widget.viewModel.deleteActiveBuilding();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFFB91C1C),
+            content: Text(
+              'Deleted building "$buildingName"',
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+          ),
+        );
+        Navigator.of(context).pop();
+      }
+    }
   }
 }
 

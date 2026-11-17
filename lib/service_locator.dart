@@ -113,6 +113,7 @@ class ServiceLocator {
       sensorFusionRepository: sensorFusionRepository,
       trackLivePositionUseCase: trackLivePositionUseCase,
       computeShortestPathUseCase: computeShortestPathUseCase,
+      buildingRepository: buildingRepository,
     );
   }
 

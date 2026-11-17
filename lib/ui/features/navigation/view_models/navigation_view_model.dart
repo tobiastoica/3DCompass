@@ -6,6 +6,7 @@ import 'package:compass_3d/domain/models/coordinates_3d.dart';
 import 'package:compass_3d/domain/models/nav_node.dart';
 import 'package:compass_3d/domain/models/navigation_path.dart';
 import 'package:compass_3d/domain/models/position_estimate.dart';
+import 'package:compass_3d/domain/repositories/building_repository.dart';
 import 'package:compass_3d/domain/repositories/navigation_repository.dart';
 import 'package:compass_3d/domain/repositories/sensor_fusion_repository.dart';
 import 'package:compass_3d/domain/use_cases/compute_shortest_3d_path_use_case.dart';
@@ -19,15 +20,18 @@ class NavigationViewModel extends ChangeNotifier {
     required SensorFusionRepository sensorFusionRepository,
     required TrackLivePositionUseCase trackLivePositionUseCase,
     required ComputeShortest3DPathUseCase computeShortestPathUseCase,
+    BuildingRepository? buildingRepository,
   })  : _navigationRepository = navigationRepository,
         _sensorFusionRepository = sensorFusionRepository,
         _trackLivePositionUseCase = trackLivePositionUseCase,
-        _computeShortestPathUseCase = computeShortestPathUseCase;
+        _computeShortestPathUseCase = computeShortestPathUseCase,
+        _buildingRepository = buildingRepository;
 
   final NavigationRepository _navigationRepository;
   final SensorFusionRepository _sensorFusionRepository;
   final TrackLivePositionUseCase _trackLivePositionUseCase;
   final ComputeShortest3DPathUseCase _computeShortestPathUseCase;
+  final BuildingRepository? _buildingRepository;
 
   StreamSubscription<PositionEstimate>? _posSub;
   Coordinates3D _userPosition = Coordinates3D.zero;
@@ -46,6 +50,15 @@ class NavigationViewModel extends ChangeNotifier {
 
   /// The active building model.
   Building3DModel? get activeBuilding => _navigationRepository.activeBuilding;
+
+  /// Deletes the currently active building from storage.
+  Future<void> deleteActiveBuilding() async {
+    final building = activeBuilding;
+    final repo = _buildingRepository;
+    if (building != null && repo != null) {
+      await repo.deleteBuilding(building.id);
+    }
+  }
 
   /// The estimated 3D position of the user.
   Coordinates3D get userPosition => _userPosition;

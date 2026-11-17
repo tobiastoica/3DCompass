@@ -230,11 +230,11 @@ class CanvassingViewModel extends ChangeNotifier {
         }
       }
 
-      // Automatically place corridor waypoints and structural planes:
-      // A) Corner / Turn Waypoint: When user turned > 25° (0.44 rad) and moved at least 1.2m
-      // B) Straight Corridor Waypoint: Every 2.5m to maintain clean topological graph
-      final isTurn = headingChangeSinceLastNode > 0.44 && distSinceLast >= 1.2;
-      final isStraightInterval = distSinceLast >= 2.5;
+      // Automatically place corridor waypoints and structural planes every 0.5m:
+      // A) Corner / Turn Waypoint: When user turned > 20° (0.35 rad) and moved at least 0.45m
+      // B) Straight Corridor Waypoint: Every 0.5m (as requested: waypoints every 0.5m)
+      final isTurn = headingChangeSinceLastNode > 0.35 && distSinceLast >= 0.45;
+      final isStraightInterval = distSinceLast >= 0.50;
 
       if (!_isTraversingStairs && _lastWalkNode != null && (isTurn || isStraightInterval)) {
         final corridorId = 'corridor_${_surveyedNodes.length}';
@@ -276,7 +276,7 @@ class CanvassingViewModel extends ChangeNotifier {
           id: 'plane_corridor_${_surveyedNodes.length}',
           center: _currentPosition,
           extentX: 1.6,
-          extentZ: distSinceLast.clamp(1.0, 4.0),
+          extentZ: distSinceLast.clamp(0.4, 4.0),
           type: ArPlaneType.horizontalUpwardFacing,
           boundaryPolygon: [leftP1, rightP1, rightP2, leftP2],
         ));
@@ -285,7 +285,7 @@ class CanvassingViewModel extends ChangeNotifier {
         _arCoreService.emitPlane(ArPlaneData(
           id: 'plane_wall_l_${_surveyedNodes.length}',
           center: p2.translate(dx: normX, dy: normY, dz: 1.5),
-          extentX: distSinceLast.clamp(1.0, 4.0),
+          extentX: distSinceLast.clamp(0.4, 4.0),
           extentZ: 3.0,
           type: ArPlaneType.vertical,
           boundaryPolygon: [
@@ -300,7 +300,7 @@ class CanvassingViewModel extends ChangeNotifier {
         _arCoreService.emitPlane(ArPlaneData(
           id: 'plane_wall_r_${_surveyedNodes.length}',
           center: p2.translate(dx: -normX, dy: -normY, dz: 1.5),
-          extentX: distSinceLast.clamp(1.0, 4.0),
+          extentX: distSinceLast.clamp(0.4, 4.0),
           extentZ: 3.0,
           type: ArPlaneType.vertical,
           boundaryPolygon: [
